@@ -3,11 +3,7 @@
 
 
 // Common interface for any angle-driven actuator (hobby servo, PCA9685-driven
-// servo, geared stepper acting as a joint, ...). Concrete motor types plug
-// into ServoManager/Robot code by implementing begin() (hardware setup) and
-// writeAngle() (a single hardware write); the gradual move-to-target loop,
-// target clamping, default angle, state tracking and debug flag all live
-// here so they aren't duplicated per motor type.
+// servo, geared stepper acting as a joint, ...).
 class Motor {
 public:
     enum State {
@@ -21,11 +17,7 @@ public:
     virtual void begin() = 0;
 
     // Advances the motor towards target_angle. Must be called repeatedly (e.g.
-    // from loop()). Default implementation steps 1 degree at a time through
-    // writeAngle() - fine for a hobby servo, but override this in motor types
-    // that need a different movement strategy (e.g. a stepper that computes a
-    // step count and drives it with its own pulse/acceleration timing instead
-    // of walking degree by degree).
+    // from loop()).
     virtual void update() {
         if (current_angle == target_angle) {
             setState(HOLD);
@@ -88,9 +80,9 @@ public:
 protected:
     // rotationDelay is the time between 1-degree steps in the default update()
     // loop (lower = faster sweep speed). Motor types with their own update()
-    // override (e.g. StepMotor) can ignore it.
+    // override can ignore it.
     explicit Motor(
-        uint8_t defaultAngle,
+        uint16_t defaultAngle,
         uint16_t rotationDelay = DEFAULT_ROTATION_DELAY,
         uint16_t minAngle = MIN_ANGLE,
         uint16_t maxAngle = MAX_ANGLE
