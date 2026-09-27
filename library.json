@@ -1,13 +1,28 @@
 {
   "name": "MotorControl",
   "version": "0.1.0",
-  "description": "Angle-driven actuator abstraction (hobby servo, PCA9685 servo, A4988 stepper) plus a manager that drives a fleet of them non-blockingly.",
+  "description": "Actuator abstraction (hobby servo, PCA9685 servo, A4988 stepper, homed stepper) plus a manager that drives a fleet of them non-blockingly, with idle power release and pluggable speed profiles.",
   "keywords": "motor, servo, stepper, pca9685, a4988, robotics",
   "frameworks": "arduino",
   "platforms": "*",
-  "headers": ["ServoManager.h", "Motor.h"],
+  "headers": [
+    "MotorManager.h",
+    "ServoManager.h",
+    "StepperManager.h",
+    "Motor.h",
+    "Stepper.h",
+    "LinearRamp.h"
+  ],
   "dependencies": [
-    { "owner": "arduino-libraries", "name": "Servo", "version": "^1.3.0" },
-    { "owner": "adafruit", "name": "Adafruit PWM Servo Driver Library", "version": "^3.0.3" }
+    {
+      "owner": "arduino-libraries",
+      "name": "Servo",
+      "version": "^1.3.0"
+    },
+    {
+      "owner": "adafruit",
+      "name": "Adafruit PWM Servo Driver Library",
+      "version": "^3.0.3"
+    }
   ]
 }
