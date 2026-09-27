@@ -3,26 +3,8 @@
 #include "A4988Stepper.h"
 
 // An A4988Stepper that *finds* its base position instead of assuming one.
-//
-// Stepper::begin() can only declare "wherever the shaft is now is step 0",
-// which is an assumption that silently poisons every later position if it is
-// wrong. This class earns the base position against a mechanical endstop
-// (an Omron D3V-style SPDT microswitch, or any snap-action switch): begin()
-// drives the axis onto the switch, makes that point step 0, and then moves to
-// the configured rest position. After begin() returns, step 0 is a real,
-// repeatable place on the machine.
-//
-// The search is two-pass. The trip point of a snap-action switch is only
-// repeatable at low speed - approach it fast and the contact closes a little
-// further along each time, by an amount that varies with speed. So the seek
-// pass finds it quickly, the axis backs off to release it, and a slow
-// re-approach takes the reading that actually sets the base position.
 class HomedStepper : public A4988Stepper {
 public:
-    // Prefer NORMALLY_CLOSED. Wired that way the loop is closed while the axis
-    // is clear, so a cut wire, a cold crimp or an unplugged connector reads
-    // exactly like a trigger and stops the axis. Wired NORMALLY_OPEN those
-    // same faults read "all clear" and the axis drives into the stop.
     enum LimitWiring {
         NORMALLY_OPEN,
         NORMALLY_CLOSED
@@ -46,12 +28,8 @@ public:
           homeMaxSteps(2000), homeBackoffSteps(40), homeSlowIntervalUs(4000),
           result(NOT_HOMED) {}
 
-    // Optional tuning; call before begin(). homeDirection is the sign of
-    // travel towards the switch: -1 when the endstop sits at the low end of
-    // travel (the usual arrangement), +1 at the high end. maxSteps bounds the
-    // seek so a dead or miswired switch cannot drive the axis into the stop
-    // forever. restStep is where the axis parks once homed, in steps from the
-    // switch.
+    // Optional tuning; call before begin().
+    // Optional tuning; call before begin().
     void configureHoming(long restStep,
                          int8_t homeDirection = -1,
                          long maxSteps = 2000,
@@ -64,10 +42,7 @@ public:
         this->homeSlowIntervalUs = slowIntervalUs;
     }
 
-    // Sets up the pins, runs the search, then drives to restStep. Blocking:
-    // homing is a start-up operation, and until it finishes there is no
-    // position worth reporting. A failed search leaves the axis where it
-    // stopped and reports HOMING_FAILED rather than pretending.
+    // Sets up the pins, runs the search, then drives to restStep.
     void begin() override {
         A4988Stepper::begin();
 
@@ -90,8 +65,18 @@ public:
     }
 
     // Runs the search on demand. Returns true and makes the trip point step 0;
-    // returns false with the axis stopped wherever the failure was detected.
     bool home() {
+        const StepProfile* saved = getProfile();
+        setProfile(nullptr);
+
+        bool ok = search();
+
+        setProfile(saved);
+        return ok;
+    }
+
+private:
+    bool search() {
         resyncLimit();
 
         // Starting already on the switch leaves the seek pass nothing to find,
@@ -126,9 +111,11 @@ public:
         return true;
     }
 
+public:
     // Adds an endstop guard on top of the normal step loop.
     void update() override {
         updateLimit();
+        
 
         // Driving further onto a closed endstop crashes the axis. Stop and
         // hold; moving away from the switch stays allowed.
@@ -155,17 +142,10 @@ public:
 
 private:
     bool readLimitRaw() const {
-        // INPUT_PULLUP idles the pin HIGH. A NO contact closes to GND when hit
-        // (LOW means triggered); a NC contact opens when hit and lets the
-        // pull-up win (HIGH means triggered).
         return (limitWiring == NORMALLY_OPEN) ? (digitalRead(limitPin) == LOW)
                                               : (digitalRead(limitPin) == HIGH);
     }
 
-    // A snap-action switch chatters for a few milliseconds around the
-    // transition. Waiting for a stable level would delay detection and let the
-    // axis overshoot the trip point, so act on the first edge seen and then
-    // ignore the pin until the contacts have settled.
     void updateLimit() {
         if (millis() - limitLastChange < LIMIT_DEBOUNCE_MS) return;
 
@@ -176,9 +156,6 @@ private:
         limitLastChange = millis();
     }
 
-    // Ground truth, bypassing the debounce lock-out. A run may start within
-    // the debounce window of a previous one or of a knock, and opening the
-    // search in the wrong phase from a stale reading wastes a pass.
     void resyncLimit() {
         limitState = readLimitRaw();
         limitLastChange = millis();
@@ -190,9 +167,6 @@ private:
     }
 
     // Steps towards the current target, stopping early if the endstop trips.
-    // True if it tripped, false if the move ran out without triggering. Calls
-    // Stepper::update() directly: the endstop guard in our own update() would
-    // fight a pass that is deliberately driving onto the switch.
     bool driveUntilLimit() {
         while (currentStep != targetStep) {
             updateLimit();
@@ -208,12 +182,7 @@ private:
         while (currentStep != targetStep) Stepper::update();
     }
 
-    // Retreats away from the switch until it releases, in backoffSteps
-    // increments. A fixed retreat is not enough: the axis can power up further
-    // past the trip point than any single increment - shoved there by hand, or
-    // left there by a previous failed run - and would then never clear. Bounded
-    // by the seek allowance so a contact stuck closed fails instead of driving
-    // the axis off the far end. Returns the distance travelled, 0 on failure.
+    // Retreats away from the switch until it releases
     long backOffUntilClear() {
         long travelled = 0;
 

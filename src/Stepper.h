@@ -2,6 +2,30 @@
 #include <Arduino.h>
 
 
+// A speed profile: how long to wait before the next pulse, given where the move
+// has got to. Attach one to a Stepper and it decides the pace; attach none (the
+// default) and the axis runs at one flat interval, as it always has.
+//
+// Stateless and const on purpose - the move's state belongs to the Stepper, so
+// a single profile instance can be shared by every axis in a fleet, and costs
+// each of them nothing but the pointer. Concrete profiles live in their own
+// headers (LinearRamp.h); a sketch that wants none includes none.
+class StepProfile {
+public:
+    virtual ~StepProfile() = default;
+
+    // stepsDone  how far this move has travelled from where it started
+    // stepsLeft  how far it still has to go
+    // cruiseUs   the interval the axis was asked for, i.e. its top speed
+    virtual unsigned long intervalFor(long stepsDone, long stepsLeft,
+                                      unsigned long cruiseUs) const = 0;
+
+    // Steps needed to come to rest from full speed, for stopRamped(). 0 says
+    // the axis can stop dead.
+    virtual long stopDistance() const { return 0; }
+};
+
+
 class Stepper {
 public:
     enum State {
@@ -25,7 +49,7 @@ public:
         }
 
         unsigned long now = micros();
-        if (now - lastStepAt < stepIntervalUs) return;
+        if (now - lastStepAt < currentInterval()) return;
 
         bool forward = (targetStep > currentStep);
         applyDirection(forward);
@@ -44,6 +68,11 @@ public:
     // Absolute move, in steps from the base position. May be negative: the
     // base position is a reference, not a floor.
     void moveToStep(long step) {
+        // A move commanded while the axis is already running composes onto the
+        // one in flight, so it keeps that move's starting point: restarting the
+        // ramp would slow a running axis back down to its starting speed.
+        if (currentStep == targetStep) moveStartStep = currentStep;
+
         targetStep = step;
 
         if (DEBUG) {
@@ -58,14 +87,34 @@ public:
     }
 
     // Cancels a move in flight by making the current position the target.
+    // Immediate: the axis stops on the next pulse it was going to emit. This is
+    // what an endstop hit wants, ramp or no ramp.
     void stopHere() {
         moveToStep(currentStep);
+    }
+
+    // Brings the axis to rest over the profile's stopping distance instead of
+    // dropping it dead, for a stop that is asked for rather than forced. Same
+    // thing as stopHere() when there is no profile, and it never extends a move
+    // that was already shorter than the stopping distance.
+    void stopRamped() {
+        if (currentStep == targetStep) return;
+
+        long left = targetStep - currentStep;
+        long dir = (left > 0) ? 1 : -1;
+        long span = profile ? profile->stopDistance() : 0;
+        long remaining = (left > 0) ? left : -left;
+
+        if (span > remaining) span = remaining;
+
+        moveToStep(currentStep + dir * span);
     }
 
     // Redefines where the axis believes it is
     void setOrigin(long step = 0) {
         currentStep = step;
         targetStep = step;
+        moveStartStep = step;
         setState(HOLD);
     }
 
@@ -89,7 +138,33 @@ public:
         return r;
     }
 
-    // Pulse spacing, i.e. speed. Settable after construction because homing
+    // Attach a speed profile, or nullptr for a flat interval (the default).
+    // The profile is borrowed, not owned - it is expected to outlive the axis,
+    // which a file-scope instance in the sketch does.
+    void setProfile(const StepProfile* p) {
+        profile = p;
+    }
+
+    const StepProfile* getProfile() const {
+        return profile;
+    }
+
+    // The interval the next pulse will actually wait out: the profile's idea of
+    // the pace here, or the flat interval when there is no profile. Distinct
+    // from getStepInterval(), which is the top speed the axis was asked for.
+    unsigned long currentInterval() const {
+        if (!profile) return stepIntervalUs;
+
+        long done = currentStep - moveStartStep;
+        long left = targetStep - currentStep;
+
+        return profile->intervalFor((done > 0) ? done : -done,
+                                    (left > 0) ? left : -left,
+                                    stepIntervalUs);
+    }
+
+    // Pulse spacing, i.e. speed. With a profile attached this is the top speed
+    // the ramp works towards. Settable after construction because homing
     // switches between a fast seek and a slow, repeatable re-approach.
     void setStepInterval(unsigned long us) {
         stepIntervalUs = us;
@@ -119,6 +194,8 @@ protected:
           stepIntervalUs(stepIntervalUs),
           currentStep(0),
           targetStep(0),
+          moveStartStep(0),
+          profile(nullptr),
           lastStepAt(0),
           state(HOLD),
           justReached(false),
@@ -145,6 +222,8 @@ protected:
 
     long currentStep;
     long targetStep;
+    long moveStartStep;          // where the move in flight began, for the ramp
+    const StepProfile* profile;  // borrowed; nullptr means a flat interval
     unsigned long lastStepAt;
 
     State state;
