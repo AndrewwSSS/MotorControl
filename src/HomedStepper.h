@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include "A4988Stepper.h"
+#include "Log.h"
 
 // An A4988Stepper that *finds* its base position instead of assuming one.
 class HomedStepper : public A4988Stepper {
@@ -29,7 +30,6 @@ public:
           result(NOT_HOMED) {}
 
     // Optional tuning; call before begin().
-    // Optional tuning; call before begin().
     void configureHoming(long restStep,
                          int8_t homeDirection = -1,
                          long maxSteps = 2000,
@@ -49,17 +49,17 @@ public:
         pinMode(limitPin, INPUT_PULLUP);
         resyncLimit();
 
-        Serial.println("HomedStepper homing on step pin " + String(getStepPin()) +
-                       " towards limit pin " + String(limitPin));
+        MC_INFO(F("HomedStepper homing on step pin "), getStepPin(),
+                F(" towards limit pin "), limitPin);
 
         result = home() ? HOMED : HOMING_FAILED;
 
         if (result != HOMED) {
-            Serial.println("HomedStepper HOMING FAILED on step pin " + String(getStepPin()));
+            MC_ERROR(F("HomedStepper HOMING FAILED on step pin "), getStepPin());
             return;
         }
 
-        Serial.println("HomedStepper homed, moving to rest step: " + String(restStep));
+        MC_INFO(F("HomedStepper homed, moving to rest step: "), restStep);
         moveToStep(restStep);
         driveBlocking();
     }
@@ -87,13 +87,22 @@ private:
 
             if (!driveUntilLimit()) {
                 stopHere();
-                return false;   // ran the whole allowance, switch never closed
+                MC_ERROR(F("HomedStepper on step pin "), getStepPin(),
+                         F(": switch never closed within "), homeMaxSteps, F(" steps"));
+                return false;
             }
+        } else {
+            MC_INFO(F("HomedStepper on step pin "), getStepPin(),
+                    F(": already on the switch, skipping seek pass"));
         }
         stopHere();
 
         long backedOff = backOffUntilClear();
-        if (backedOff == 0) return false;   // contact never released
+        if (backedOff == 0) {
+            MC_ERROR(F("HomedStepper on step pin "), getStepPin(),
+                     F(": switch never released while backing off"));
+            return false;
+        }
 
         unsigned long fast = getStepInterval();
         setStepInterval(homeSlowIntervalUs);
@@ -104,7 +113,11 @@ private:
         setStepInterval(fast);
 
         stopHere();
-        if (!hit) return false;
+        if (!hit) {
+            MC_ERROR(F("HomedStepper on step pin "), getStepPin(),
+                     F(": switch not found on slow re-approach"));
+            return false;
+        }
 
         // The switch is the base position.
         setOrigin(0);
@@ -115,7 +128,6 @@ public:
     // Adds an endstop guard on top of the normal step loop.
     void update() override {
         updateLimit();
-        
 
         // Driving further onto a closed endstop crashes the axis. Stop and
         // hold; moving away from the switch stays allowed.

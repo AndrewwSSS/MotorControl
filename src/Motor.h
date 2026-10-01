@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "Log.h"
 
 
 // Common interface for any angle-driven actuator (hobby servo, PCA9685-driven
@@ -32,9 +33,7 @@ public:
         lastMove = now;
         setState(MOVING);
 
-        if (DEBUG) {
-            Serial.println("Current angle: " + String(current_angle));
-        }
+        if (debugEnabled) MC_TRACE(F("Current angle: "), current_angle);
     }
 
     void setAngle(uint16_t angle) {
@@ -43,9 +42,7 @@ public:
 
         this->target_angle = angle;
 
-        if (DEBUG) {
-            Serial.println("Setting target angle to " + String(target_angle));
-        }
+        if (debugEnabled) MC_DEBUG(F("Setting target angle to "), target_angle);
     }
 
     void setDefaultAngle() {
@@ -56,12 +53,14 @@ public:
         return this->current_angle;
     }
 
+    // Per-motor switch for the DEBUG and TRACE messages. Has no effect unless
+    // MC_LOG_LEVEL compiles them in - see Log.h.
     void toggleDebug() {
-        this->DEBUG = !this->DEBUG;
+        this->debugEnabled = !this->debugEnabled;
     }
 
     bool getDebug() const {
-        return this->DEBUG;
+        return this->debugEnabled;
     }
 
     State getState() const {
@@ -117,7 +116,7 @@ protected:
     // update() on every step and from begin() to reach the initial position.
     virtual void writeAngle(uint16_t angle) = 0;
 
-    bool DEBUG = false;
+    bool debugEnabled = false;
 
     uint16_t current_angle;
     uint16_t target_angle;

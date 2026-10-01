@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <Adafruit_PWMServoDriver.h>
 #include "Motor.h"
+#include "Log.h"
 
 // Motor implementation for a servo driven through a PCA9685 16-channel PWM
 // driver over I2C. One PCA9685 board is shared by every PCA9685Servo built
@@ -23,9 +24,7 @@ public:
     ) : Motor(defaultAngle, rotationDelay), driver(driver), channel(channel) {}
 
     void begin() override {
-        Serial.println(
-            "turning PCA9685 servo to default angle: " + String(target_angle) + " on channel " + String(channel)
-        );
+        MC_INFO(F("Turning PCA9685 servo to default angle: "), target_angle, F(" on channel "), channel);
 
         writeAngle(target_angle);
 

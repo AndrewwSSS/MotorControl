@@ -18,6 +18,7 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 | `src/MotorManager.h` | Owns a fixed-size fleet of actuators, addressed by index; the part that is the same for servos and steppers |
 | `src/ServoManager.h` | `MotorManager<Motor>` + commands in degrees |
 | `src/StepperManager.h` | `MotorManager<Stepper>` + commands in steps, and the fleet's enable line |
+| `src/Log.h` | Compile-time log levels and the output stream every header logs through |
 
 Header-only: there are no `.cpp` files, so nothing is compiled unless a
 translation unit includes it.
@@ -170,6 +171,40 @@ gravity, a belt or a hand, and nothing notices - the step counter goes on
 reporting where the axis was left, and a `HomedStepper`'s base position becomes a
 guess again. Use it for axes that cannot back-drive, or that are re-homed before
 their position is trusted; not for one holding a load up.
+
+## Logging
+
+Everything the library prints goes through `Log.h`. Each project picks a level
+in its `platformio.ini`:
+
+```ini
+build_flags = -D MC_LOG_LEVEL=MC_LOG_DEBUG
+```
+
+| Level | Prints |
+| --- | --- |
+| `MC_LOG_NONE` | nothing |
+| `MC_LOG_ERROR` | failures, e.g. a homing search that did not find its switch |
+| `MC_LOG_INFO` (default) | start-up: servos driven to their default angle, homing progress, a skipped seek pass |
+| `MC_LOG_DEBUG` | every commanded target, for motors with `toggleDebug()` on |
+| `MC_LOG_TRACE` | every step or degree moved, for motors with `toggleDebug()` on |
+
+Messages above the chosen level are removed by the preprocessor, text and all.
+`toggleDebug()` switches the DEBUG and TRACE messages per motor at runtime, but
+only when the level compiles them in. TRACE prints once per pulse, which slows
+the step loop down - keep it for the bench.
+
+Output goes to `Serial` unless the project points it elsewhere. The stream is
+not begun by the library; the sketch still calls `begin()` on it:
+
+```ini
+build_flags = -D MC_LOG_LEVEL=MC_LOG_INFO -D MC_LOG_STREAM=Serial1
+```
+
+Set both through `build_flags` rather than a `#define` in `main.cpp`, so every
+translation unit sees the same values. Inside the library, log with
+`MC_ERROR(F("text "), value, ...)` and its siblings: arguments are printed in
+turn with `F()` text kept in flash, and no `String` is built.
 
 ## Adding a motor type
 

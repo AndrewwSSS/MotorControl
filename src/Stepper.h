@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "Log.h"
 
 
 // A speed profile: how long to wait before the next pulse, given where the move
@@ -59,10 +60,7 @@ public:
         lastStepAt = now;
         setState(MOVING);
 
-        if (DEBUG) {
-            Serial.println("Current step: " + String(currentStep) +
-                           " of " + String(targetStep));
-        }
+        if (debugEnabled) MC_TRACE(F("Current step: "), currentStep, F(" of "), targetStep);
     }
 
     // Absolute move, in steps from the base position. May be negative: the
@@ -75,9 +73,7 @@ public:
 
         targetStep = step;
 
-        if (DEBUG) {
-            Serial.println("Target step: " + String(targetStep));
-        }
+        if (debugEnabled) MC_DEBUG(F("Target step: "), targetStep);
     }
 
     // Relative move. Anchored on the target rather than the current position
@@ -180,12 +176,14 @@ public:
         return stepsPerRevolution;
     }
 
+    // Per-axis switch for the DEBUG and TRACE messages. Has no effect unless
+    // MC_LOG_LEVEL compiles them in - see Log.h.
     void toggleDebug() {
-        this->DEBUG = !this->DEBUG;
+        this->debugEnabled = !this->debugEnabled;
     }
 
     bool getDebug() const {
-        return this->DEBUG;
+        return this->debugEnabled;
     }
 
 protected:
@@ -199,7 +197,7 @@ protected:
           lastStepAt(0),
           state(HOLD),
           justReached(false),
-          DEBUG(false) {}
+          debugEnabled(false) {}
 
     // Sets the driver's direction input ahead of a pulse. forward means the
     // step counter is about to increase.
@@ -228,5 +226,5 @@ protected:
 
     State state;
     bool justReached;
-    bool DEBUG;
+    bool debugEnabled;
 };

@@ -2,6 +2,7 @@
 #include <Servo.h>
 #include <Arduino.h>
 #include "Motor.h"
+#include "Log.h"
 
 
 // Motor implementation backed by the Arduino Servo library (one hardware PWM
@@ -16,7 +17,7 @@ public:
     }
 
     void begin() override {
-        Serial.println("turning servo to default angle: " + String(target_angle) + " on pin " + String(servoPin));
+        MC_INFO(F("Turning servo to default angle: "), target_angle, F(" on pin "), servoPin);
 
         servo.attach(servoPin);
         writeAngle(target_angle);
