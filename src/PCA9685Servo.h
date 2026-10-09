@@ -1,10 +1,10 @@
 #pragma once
 #include <Arduino.h>
 #include <Adafruit_PWMServoDriver.h>
-#include "Motor.h"
+#include "AngularMotor.h"
 #include "Log.h"
 
-// Motor implementation for a servo driven through a PCA9685 16-channel PWM
+// AngularMotor implementation for a servo driven through a PCA9685 16-channel PWM
 // driver over I2C. One PCA9685 board is shared by every PCA9685Servo built
 // on top of it (each just claims one of its 16 channels), so the driver is
 // taken by reference rather than owned here. Initialize the shared driver
@@ -14,19 +14,19 @@
 //   pwm.begin();
 //   pwm.setPWMFreq(50); // standard analog servo frequency
 //
-class PCA9685Servo : public Motor {
+class PCA9685Servo : public AngularMotor {
 public:
     PCA9685Servo(
         Adafruit_PWMServoDriver& driver,
         uint8_t channel,
         uint16_t defaultAngle = DEFAULT_ANGLE,
         uint16_t rotationDelay = DEFAULT_ROTATION_DELAY
-    ) : Motor(defaultAngle, rotationDelay), driver(driver), channel(channel) {}
+    ) : AngularMotor(defaultAngle, rotationDelay), driver(driver), channel(channel) {}
 
     void begin() override {
-        MC_INFO(F("Turning PCA9685 servo to default angle: "), target_angle, F(" on channel "), channel);
+        MC_INFO(F("Turning PCA9685 servo to default angle: "), targetAngle, F(" on channel "), channel);
 
-        writeAngle(target_angle);
+        writeAngle(targetAngle);
 
         // Wait for the servo to reach the default position
         delay(1000);

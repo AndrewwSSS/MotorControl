@@ -1,15 +1,16 @@
 #pragma once
-#include "Motor.h"
+#include "AngularMotor.h"
 #include "MotorManager.h"
 
-typedef MotorManager<Motor>::ReachedCallback ServoReachedCallback;
+typedef MotorManager<AngularMotor>::ReachedCallback ServoReachedCallback;
 
 // A fleet of angle-driven motors: MotorManager's lifecycle plus commands in
-// degrees. Any Motor subtype can join (ServoMotor, PCA9685Servo, a degree
-// wrapper around a stepper joint, ...) - the manager only talks through Motor.
-class ServoManager : public MotorManager<Motor> {
+// degrees. Any AngularMotor subtype can join (ServoMotor, PCA9685Servo, a
+// degree wrapper around a stepper joint, ...) - the manager only talks through
+// AngularMotor.
+class ServoManager : public MotorManager<AngularMotor> {
 public:
-    explicit ServoManager(uint8_t capacity) : MotorManager<Motor>(capacity) {}
+    explicit ServoManager(uint8_t capacity) : MotorManager<AngularMotor>(capacity) {}
 
     void begin() {
         beginMotors();
@@ -24,7 +25,7 @@ public:
     }
 
     void setAngle(uint8_t id, int angle) {
-        // Motor::setAngle clamps, but takes an unsigned angle: a negative one
+        // AngularMotor::setAngle clamps, but takes an unsigned angle: a negative one
         // would wrap to a huge value and clamp to maxAngle - the far end of
         // travel - rather than to the near one meant here.
         if (angle < 0) angle = 0;

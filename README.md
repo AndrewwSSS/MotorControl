@@ -8,7 +8,7 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 
 | File | Role |
 | --- | --- |
-| `src/Motor.h` | Abstract base: target clamping, non-blocking move loop, state + `reachedTarget()` edge |
+| `src/AngularMotor.h` | Abstract base: target clamping, non-blocking move loop, state + `reachedTarget()` edge |
 | `src/ServoMotor.h` | Backed by the Arduino `Servo` library (one hardware PWM pin per motor) |
 | `src/PCA9685Servo.h` | Backed by a shared PCA9685 16-channel PWM driver over I2C |
 | `src/Stepper.h` | Abstract stepper base: position in steps from a base position, non-blocking step loop, `StepProfile` seam |
@@ -17,7 +17,7 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 | `src/Endstop.h` | A limit switch on its own pin: NO/NC wiring, debounce, which end of travel it guards |
 | `src/Homing.h` | `homeAxis()`: finds an axis's base position against one of its endstops |
 | `src/MotorManager.h` | Owns a fixed-size fleet of actuators, addressed by index; the part that is the same for servos and steppers |
-| `src/ServoManager.h` | `MotorManager<Motor>` + commands in degrees |
+| `src/ServoManager.h` | `MotorManager<AngularMotor>` + commands in degrees |
 | `src/StepperManager.h` | `MotorManager<Stepper>` + commands in steps, and the fleet's enable line |
 | `src/Log.h` | Compile-time log levels and the output stream every header logs through |
 
@@ -26,8 +26,8 @@ translation unit includes it.
 
 ## The two roots
 
-`Motor` models an absolute, clamped, unsigned angle written straight to the
-hardware - a servo. A stepper's natural unit is a signed, unbounded step count
+`AngularMotor` models an absolute, clamped, unsigned angle written straight to
+the hardware - a servo. A stepper's natural unit is a signed, unbounded step count
 relative to a base position it has to earn, so it has its own root, `Stepper`.
 
 What the two share is their lifecycle: `begin()`, a non-blocking `update()`, a
@@ -259,14 +259,14 @@ To support a different stepper driver chip, subclass `Stepper` and implement
 `applyDirection(bool)` and `pulseStep()` - see `A4988Stepper.h`. It can then join
 any `StepperManager` fleet.
 
-For a servo, subclass `Motor` and implement `begin()` (hardware setup + drive to
-the default angle) and `writeAngle(uint16_t)` (one hardware write). `Motor`'s
+For a servo, subclass `AngularMotor` and implement `begin()` (hardware setup + drive to
+the default angle) and `writeAngle(uint16_t)` (one hardware write). `AngularMotor`'s
 degree-by-degree `update()` suits anything that takes an absolute angle command;
 if it does not fit, the actuator probably wants its own root rather than an
 `update()` override - see `Stepper.h`.
 
 A stepper that should be commanded in degrees and join a servo fleet is the one
-case that crosses over: implement `Motor` and hold a `Stepper` underneath,
+case that crosses over: implement `AngularMotor` and hold a `Stepper` underneath,
 converting with `getStepsPerRevolution()`.
 
 ## Adding a manager

@@ -4,10 +4,10 @@
 
 // Owns and drives a fixed-size fleet of actuators, addressed by index.
 //
-// T is an actuator root: Motor for angle-driven servos, Stepper for step-driven
-// axes. Both expose the same lifecycle - begin(), a non-blocking update(), a
-// State enum with MOVING and HOLD, the one-shot reachedTarget() edge and the
-// debug toggle - and that lifecycle is all this class touches. Commands in the
+// T is an actuator root: AngularMotor for angle-driven servos, Stepper for
+// step-driven axes. Both expose the same lifecycle - begin(), a non-blocking
+// update(), a State enum with MOVING and HOLD, the one-shot reachedTarget()
+// edge and the debug toggle - and that lifecycle is all this class touches. Commands in the
 // actuator's own unit (degrees, steps) live on the subclasses, ServoManager and
 // StepperManager.
 //

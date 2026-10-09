@@ -9,7 +9,7 @@
     "MotorManager.h",
     "ServoManager.h",
     "StepperManager.h",
-    "Motor.h",
+    "AngularMotor.h",
     "Stepper.h",
     "Endstop.h",
     "Homing.h",

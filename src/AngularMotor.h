@@ -5,22 +5,22 @@
 
 // Common interface for any angle-driven actuator (hobby servo, PCA9685-driven
 // servo, geared stepper acting as a joint, ...).
-class Motor {
+class AngularMotor {
 public:
     enum State {
         MOVING,
         HOLD
     };
 
-    virtual ~Motor() = default;
+    virtual ~AngularMotor() = default;
 
     // Attaches/initializes the underlying hardware and drives it to defaultAngle.
     virtual void begin() = 0;
 
-    // Advances the motor towards target_angle. Must be called repeatedly (e.g.
+    // Advances the motor towards targetAngle. Must be called repeatedly (e.g.
     // from loop()).
     virtual void update() {
-        if (current_angle == target_angle) {
+        if (currentAngle == targetAngle) {
             setState(HOLD);
             return;
         }
@@ -28,21 +28,21 @@ public:
         unsigned long now = millis();
         if (now - lastMove < rotationDelay) return;
 
-        current_angle += (current_angle < target_angle) ? 1 : -1;
-        writeAngle(current_angle);
+        currentAngle += (currentAngle < targetAngle) ? 1 : -1;
+        writeAngle(currentAngle);
         lastMove = now;
         setState(MOVING);
 
-        if (debugEnabled) MC_TRACE(F("Current angle: "), current_angle);
+        if (debugEnabled) MC_TRACE(F("Current angle: "), currentAngle);
     }
 
     void setAngle(uint16_t angle) {
         if (angle < this->minAngle) angle = this->minAngle;
         if (angle > this->maxAngle) angle = this->maxAngle;
 
-        this->target_angle = angle;
+        this->targetAngle = angle;
 
-        if (debugEnabled) MC_DEBUG(F("Setting target angle to "), target_angle);
+        if (debugEnabled) MC_DEBUG(F("Setting target angle to "), targetAngle);
     }
 
     void setDefaultAngle() {
@@ -50,7 +50,7 @@ public:
     }
 
     uint16_t getAngle() const {
-        return this->current_angle;
+        return this->currentAngle;
     }
 
     // Per-motor switch for the DEBUG and TRACE messages. Has no effect unless
@@ -78,16 +78,16 @@ public:
 
 protected:
     // rotationDelay is the time between 1-degree steps in the default update()
-    // loop (lower = faster sweep speed). Motor types with their own update()
+    // loop (lower = faster sweep speed). Subclasses with their own update()
     // override can ignore it.
-    explicit Motor(
+    explicit AngularMotor(
         uint16_t defaultAngle,
         uint16_t rotationDelay = DEFAULT_ROTATION_DELAY,
         uint16_t minAngle = MIN_ANGLE,
         uint16_t maxAngle = MAX_ANGLE
     ) {
-        this->current_angle = defaultAngle;
-        this->target_angle = defaultAngle;
+        this->currentAngle = defaultAngle;
+        this->targetAngle = defaultAngle;
         this->defaultAngle = defaultAngle;
         this->lastMove = 0;
         this->rotationDelay = rotationDelay;
@@ -118,8 +118,8 @@ protected:
 
     bool debugEnabled = false;
 
-    uint16_t current_angle;
-    uint16_t target_angle;
+    uint16_t currentAngle;
+    uint16_t targetAngle;
     uint16_t defaultAngle;
     unsigned long lastMove;
     uint16_t rotationDelay;
