@@ -1,8 +1,8 @@
 {
   "name": "MotorControl",
   "version": "0.1.0",
-  "description": "Actuator abstraction (hobby servo, PCA9685 servo, A4988 stepper, homed stepper) plus a manager that drives a fleet of them non-blockingly, with idle power release and pluggable speed profiles.",
-  "keywords": "motor, servo, stepper, pca9685, a4988, robotics",
+  "description": "Actuator abstraction (hobby servo, PCA9685 servo, A4988 stepper) plus a manager that drives a fleet of them non-blockingly, with endstops and homing, idle power release and pluggable speed profiles.",
+  "keywords": "motor, servo, stepper, pca9685, a4988, endstop, homing, robotics",
   "frameworks": "arduino",
   "platforms": "*",
   "headers": [
@@ -11,6 +11,8 @@
     "StepperManager.h",
     "Motor.h",
     "Stepper.h",
+    "Endstop.h",
+    "Homing.h",
     "LinearRamp.h"
   ],
   "dependencies": [

@@ -14,7 +14,8 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 | `src/Stepper.h` | Abstract stepper base: position in steps from a base position, non-blocking step loop, `StepProfile` seam |
 | `src/LinearRamp.h` | A `StepProfile` that eases each move in and out |
 | `src/A4988Stepper.h` | Stepper on an A4988/DRV8825 step+dir driver (a CNC Shield socket); owns only the pins |
-| `src/HomedStepper.h` | A4988Stepper that finds its base position against an endstop in `begin()` |
+| `src/Endstop.h` | A limit switch on its own pin: NO/NC wiring, debounce, which end of travel it guards |
+| `src/Homing.h` | `homeAxis()`: finds an axis's base position against one of its endstops |
 | `src/MotorManager.h` | Owns a fixed-size fleet of actuators, addressed by index; the part that is the same for servos and steppers |
 | `src/ServoManager.h` | `MotorManager<Motor>` + commands in degrees |
 | `src/StepperManager.h` | `MotorManager<Stepper>` + commands in steps, and the fleet's enable line |
@@ -117,7 +118,7 @@ Two things behave differently once a profile is attached:
 - `stopHere()` stays **immediate**, because that is what an endstop hit needs.
   `stopRamped()` is the one that slows down over the profile's stopping distance,
   for a stop that is asked for rather than forced.
-- Homing detaches the profile for the duration of the search. The trip point of a
+- Homing (see below) detaches the profile for the duration of the search. The trip point of a
   snap-action switch is only repeatable at a constant low speed, which is the
   whole reason the search has a slow second pass.
 
@@ -125,13 +126,59 @@ To write another profile - constant acceleration, an S-curve, a lookup table -
 implement `StepProfile::intervalFor()`; see `LinearRamp.h`.
 
 `onReached(cb)` fires once per axis as it settles, instead of polling
-`reachedTarget()` per motor. A mixed fleet is fine - `HomedStepper` next to a
-plain `A4988Stepper` - because the manager only talks through `Stepper`; reach a
-subtype's own methods through `operator[]`:
+`reachedTarget()` per motor. A mixed fleet is fine because the manager only talks
+through `Stepper`; reach a subtype's own methods through `operator[]`:
 
 ```cpp
-static_cast<HomedStepper&>(axes[0]).isHomed();
+static_cast<A4988Stepper&>(axes[0]).getStepPin();
 ```
+
+### Endstops and homing
+
+A limit switch is an `Endstop`: its pin, how it is wired, and which end of travel
+it sits at. Attach it to any `Stepper` and the axis refuses to step further onto
+it once it is pressed; moving away stays allowed. Each axis has a slot at each
+end, so a switch at both ends is two `Endstop`s on two pins:
+
+```cpp
+#include "Endstop.h"
+
+// COM -> GND, NC -> pin. No resistor: the pin uses INPUT_PULLUP.
+Endstop xMin(A4, Endstop::NORMALLY_CLOSED, Endstop::MIN);
+Endstop xMax(A5, Endstop::NORMALLY_CLOSED, Endstop::MAX);
+
+auto* x = new A4988Stepper(2, 5, 3200, A4988Stepper::NO_ENABLE_PIN, 1000);
+x->setEndstop(&xMin);              // goes into the slot for its side
+x->setEndstop(&xMax);
+axes.addMotor(x);
+```
+
+Endstops are borrowed like profiles - declare them at file scope. `begin()` sets
+up their pins. Prefer `NORMALLY_CLOSED`: a cut wire then reads as a pressed
+switch and stops the axis, where `NORMALLY_OPEN` would read "all clear".
+
+Homing is a separate, explicit, blocking step after `begin()`. It drives the axis
+onto the switch at the end you name, makes the trip point step 0 and parks at
+the rest step:
+
+```cpp
+#include "Homing.h"
+
+//                  towards       restStep maxSteps backoffSteps slowIntervalUs
+HomingConfig xHoming = { Endstop::MIN, 100,     20000,   40,          4000 };
+
+axes.begin();
+HomingResult r = axes.home(0, xHoming);   // energises the drivers first
+if (r != HOMED) Serial.println(homingResultName(r));
+```
+
+The search is two-pass: a fast seek finds the switch, the axis backs off until it
+releases, and a slow re-approach takes the reading - a snap-action switch only
+trips at a repeatable point at low speed. A failed search stops and says which
+stage failed (`HOMING_NEVER_CLOSED`, `HOMING_NEVER_RELEASED`, `HOMING_NOT_FOUND`,
+`HOMING_NO_ENDSTOP`). `isHomed(id)` reports the outcome until `setOrigin()`
+redefines step 0. Without the manager, `homeAxis(stepper, cfg)` does the same
+on a single axis whose driver is already energised.
 
 ### Releasing the coils when idle
 
@@ -168,7 +215,7 @@ all, which is the default.
 
 The cost of releasing is holding torque. A released axis can be back-driven by
 gravity, a belt or a hand, and nothing notices - the step counter goes on
-reporting where the axis was left, and a `HomedStepper`'s base position becomes a
+reporting where the axis was left, and a homed axis's base position becomes a
 guess again. Use it for axes that cannot back-drive, or that are re-homed before
 their position is trusted; not for one holding a load up.
 

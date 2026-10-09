@@ -12,7 +12,7 @@
 // StepperManager.
 //
 // Motors are registered through addMotor(), so a fleet can hold any mix of
-// subtypes: a HomedStepper next to a plain A4988Stepper, a PCA9685Servo next to
+// subtypes: steppers on different driver chips, a PCA9685Servo next to
 // a ServoMotor. Swapping one out is a change at the new-expression and nowhere
 // else, because the manager only ever talks through T.
 template <typename T>
@@ -74,7 +74,7 @@ public:
     bool has(uint8_t id) const { return id < count; }
 
     // Unchecked, for reaching subtype-specific methods on a known-good id:
-    //   static_cast<HomedStepper&>(fleet[0]).isHomed()
+    //   static_cast<A4988Stepper&>(fleet[0]).getStepPin()
     T& operator[](uint8_t id) { return *motors[id]; }
 
     // Checked variant: nullptr for an id that was never registered.

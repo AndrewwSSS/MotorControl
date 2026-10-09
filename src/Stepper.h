@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include "Log.h"
+#include "Endstop.h"
 
 
 // A speed profile: how long to wait before the next pulse, given where the move
@@ -39,12 +40,29 @@ public:
     virtual void begin() {
         setOrigin(0);
         lastStepAt = 0;
+
+        for (uint8_t i = 0; i < 2; i++) {
+            if (endstops[i]) endstops[i]->begin();
+        }
     }
 
     // Emits at most one step pulse and returns immediately. Call repeatedly
     // from loop(); movement is non-blocking.
     virtual void update() {
+        updateEndstops();
+
         if (currentStep == targetStep) {
+            setState(HOLD);
+            return;
+        }
+
+        // Driving further onto a pressed endstop crashes the axis. Stop and
+        // hold; moving away from the switch stays allowed.
+        Endstop* hit = blockingEndstop();
+        if (hit) {
+            MC_INFO(F("Endstop "), hit->sideName(), F(" on pin "), hit->getPin(),
+                    F(" stopped the axis at step "), currentStep);
+            stopHere();
             setState(HOLD);
             return;
         }
@@ -134,6 +152,22 @@ public:
         return r;
     }
 
+    // Attach a limit switch. It goes into the slot for its own side, so an axis
+    // with a switch at each end takes two calls. Borrowed, not owned. Attach
+    // before begin(), which sets up the pin.
+    void setEndstop(Endstop* endstop) {
+        if (endstop) endstops[slot(endstop->getSide())] = endstop;
+    }
+
+    void removeEndstop(Endstop::Side side) {
+        endstops[slot(side)] = nullptr;
+    }
+
+    // nullptr when there is no switch at that end.
+    Endstop* getEndstop(Endstop::Side side) const {
+        return endstops[slot(side)];
+    }
+
     // Attach a speed profile, or nullptr for a flat interval (the default).
     // The profile is borrowed, not owned - it is expected to outlive the axis,
     // which a file-scope instance in the sketch does.
@@ -197,7 +231,10 @@ protected:
           lastStepAt(0),
           state(HOLD),
           justReached(false),
-          debugEnabled(false) {}
+          debugEnabled(false) {
+        endstops[0] = nullptr;
+        endstops[1] = nullptr;
+    }
 
     // Sets the driver's direction input ahead of a pulse. forward means the
     // step counter is about to increase.
@@ -215,6 +252,22 @@ protected:
         state = newState;
     }
 
+    static uint8_t slot(Endstop::Side side) {
+        return (side == Endstop::MIN) ? 0 : 1;
+    }
+
+    void updateEndstops() {
+        for (uint8_t i = 0; i < 2; i++) {
+            if (endstops[i]) endstops[i]->update();
+        }
+    }
+
+    // The pressed endstop in the direction of travel, if any.
+    Endstop* blockingEndstop() const {
+        Endstop* ahead = endstops[(targetStep > currentStep) ? 1 : 0];
+        return (ahead && ahead->isTriggered()) ? ahead : nullptr;
+    }
+
     uint16_t stepsPerRevolution;
     unsigned long stepIntervalUs;
 
@@ -222,6 +275,7 @@ protected:
     long targetStep;
     long moveStartStep;          // where the move in flight began, for the ramp
     const StepProfile* profile;  // borrowed; nullptr means a flat interval
+    Endstop* endstops[2];        // borrowed; [0] MIN end, [1] MAX end
     unsigned long lastStepAt;
 
     State state;

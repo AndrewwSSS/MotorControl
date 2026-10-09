@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "Stepper.h"
 #include "MotorManager.h"
+#include "Homing.h"
 
 typedef MotorManager<Stepper>::ReachedCallback StepperReachedCallback;
 
@@ -19,11 +20,17 @@ public:
         : MotorManager<Stepper>(capacity),
           enablePin(enablePin),
           idleReleaseMs(0), wakeUs(DEFAULT_WAKE_US),
-          powered(false), waking(false), enabledAt(0), lastActiveAt(0) {}
+          powered(false), waking(false), enabledAt(0), lastActiveAt(0) {
+        homing = new HomingResult[capacity];
+        for (uint8_t i = 0; i < capacity; i++) homing[i] = NOT_HOMED;
+    }
 
-    // Energises the drivers before the axes start: a HomedStepper goes looking
-    // for its endstop inside its own begin(), and a search that cannot move the
-    // axis just fails.
+    ~StepperManager() {
+        delete[] homing;
+    }
+
+    // Energises the drivers and sets up every axis, endstop pins included.
+    // Homing is a separate, explicit step: home().
     void begin() {
         if (enablePin != NO_ENABLE_PIN) pinMode(enablePin, OUTPUT);
 
@@ -135,13 +142,38 @@ public:
         for (uint8_t i = 0; i < count; i++) motors[i]->stopHere();
     }
 
-    // Redefines where an axis believes it is.
+    // Redefines where an axis believes it is. Step 0 is then no longer the
+    // switch, so the axis stops counting as homed.
     void setOrigin(uint8_t id, long step = 0) {
-        if (id < count) motors[id]->setOrigin(step);
+        if (id >= count) return;
+        motors[id]->setOrigin(step);
+        homing[id] = NOT_HOMED;
     }
 
     void setOrigins(long step = 0) {
-        for (uint8_t i = 0; i < count; i++) motors[i]->setOrigin(step);
+        for (uint8_t i = 0; i < count; i++) setOrigin(i, step);
+    }
+
+    // Finds the axis's base position against its endstop - see Homing.h.
+    // Blocking. Energises the drivers first and waits out their wake-up, since
+    // a search that cannot move the axis just fails.
+    HomingResult home(uint8_t id, const HomingConfig& cfg) {
+        if (id >= count) return NOT_HOMED;
+
+        enable();
+        while (!ready()) {}
+
+        homing[id] = homeAxis(*motors[id], cfg);
+        lastActiveAt = millis();
+        return homing[id];
+    }
+
+    HomingResult getHomingResult(uint8_t id) const {
+        return (id < count) ? homing[id] : NOT_HOMED;
+    }
+
+    bool isHomed(uint8_t id) const {
+        return getHomingResult(id) == HOMED;
     }
 
     long getStep(uint8_t id) const {
@@ -224,4 +256,5 @@ private:
     bool          waking;
     unsigned long enabledAt;
     unsigned long lastActiveAt;
+    HomingResult* homing;        // per axis, indexed like motors
 };
