@@ -81,8 +81,7 @@ public:
         if (debugEnabled) MC_TRACE(F("Current step: "), currentStep, F(" of "), targetStep);
     }
 
-    // Absolute move, in steps from the base position. May be negative: the
-    // base position is a reference, not a floor.
+    // Absolute move, in steps from the base position. May be negative.
     void moveToStep(long step) {
         // A move commanded while the axis is already running composes onto the
         // one in flight, so it keeps that move's starting point: restarting the

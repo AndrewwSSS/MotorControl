@@ -13,7 +13,7 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 | `src/PCA9685Servo.h` | Backed by a shared PCA9685 16-channel PWM driver over I2C |
 | `src/Stepper.h` | Abstract stepper base: position in steps from a base position, non-blocking step loop, `StepProfile` seam |
 | `src/LinearRamp.h` | A `StepProfile` that eases each move in and out |
-| `src/A4988Stepper.h` | Stepper on an A4988/DRV8825 step+dir driver (a CNC Shield socket); owns only the pins |
+| `src/StepDirStepper.h` | Stepper on any step+dir driver - A4988/DRV8825 (a CNC Shield socket), TB6600, DM542; owns only the pins and the driver timing |
 | `src/Endstop.h` | A limit switch on its own pin: NO/NC wiring, debounce, which end of travel it guards |
 | `src/Homing.h` | `homeAxis()`: finds an axis's base position against one of its endstops |
 | `src/MotorManager.h` | Owns a fixed-size fleet of actuators, addressed by index; the part that is the same for servos and steppers |
@@ -64,16 +64,17 @@ void loop() {
 
 ```cpp
 #include "StepperManager.h"
-#include "A4988Stepper.h"
+#include "StepDirStepper.h"
 
 StepperManager axes(2, /*shared enable pin*/ 8);
 
 void setup() {
-    axes.addMotor(new A4988Stepper(/*step*/ 2, /*dir*/ 5, /*stepsPerRev*/ 3200,
-                                   A4988Stepper::NO_ENABLE_PIN,
-                                   /*stepIntervalUs*/ 1000));                // id 0
-    axes.addMotor(new A4988Stepper(3, 6, 3200,
-                                   A4988Stepper::NO_ENABLE_PIN, 1000));      // id 1
+    axes.addMotor(new StepDirStepper(/*step*/ 2, /*dir*/ 5, /*stepsPerRev*/ 3200,
+                                     StepDirStepper::NO_ENABLE_PIN,
+                                     /*stepIntervalUs*/ 1000));              // id 0
+    axes.addMotor(new StepDirStepper(3, 6, 3200,
+                                     StepDirStepper::NO_ENABLE_PIN, 1000,
+                                     StepDirStepper::TB6600_PULSE_US));      // id 1, on a TB6600
 
     axes.begin();
 
@@ -85,6 +86,22 @@ void loop() {
     axes.update();
 }
 ```
+
+### Driver timing
+
+`StepDirStepper` drives any step+dir driver; what differs between them is timing.
+
+- **STEP pulse width** is the last constructor argument: `A4988_PULSE_US` (2 µs,
+  the default, also fine for a DRV8825) or `TB6600_PULSE_US` (5 µs), or any
+  number from the driver's datasheet.
+- **DIR setup** - how long DIR settles before the next STEP edge - is
+  `MC_DIR_SETUP_US`, 5 µs by default, and only spent when the direction
+  changes. Set it per project with `build_flags = -D MC_DIR_SETUP_US=10`, or
+  override `applyDirection()` in a subclass for anything other than a fixed wait.
+
+An opto-isolated driver (TB6600, DM542) must be wired common-cathode - PUL-,
+DIR-, ENA- to GND and the + inputs to the pins - so that HIGH means active, as
+the class assumes.
 
 ### Ramping
 
@@ -130,7 +147,7 @@ implement `StepProfile::intervalFor()`; see `LinearRamp.h`.
 through `Stepper`; reach a subtype's own methods through `operator[]`:
 
 ```cpp
-static_cast<A4988Stepper&>(axes[0]).getStepPin();
+static_cast<StepDirStepper&>(axes[0]).getStepPin();
 ```
 
 ### Endstops and homing
@@ -147,7 +164,7 @@ end, so a switch at both ends is two `Endstop`s on two pins:
 Endstop xMin(A4, Endstop::NORMALLY_CLOSED, Endstop::MIN);
 Endstop xMax(A5, Endstop::NORMALLY_CLOSED, Endstop::MAX);
 
-auto* x = new A4988Stepper(2, 5, 3200, A4988Stepper::NO_ENABLE_PIN, 1000);
+auto* x = new StepDirStepper(2, 5, 3200, StepDirStepper::NO_ENABLE_PIN, 1000);
 x->setEndstop(&xMin);              // goes into the slot for its side
 x->setEndstop(&xMax);
 axes.addMotor(x);
@@ -204,12 +221,12 @@ knows when everything has gone quiet. Axes on such a board are built with
 `NO_ENABLE_PIN` and leave it alone:
 
 ```cpp
-axes.addMotor(new A4988Stepper(2, 5, 3200, A4988Stepper::NO_ENABLE_PIN, 1000));
-axes.addMotor(new A4988Stepper(3, 6, 3200, A4988Stepper::NO_ENABLE_PIN, 1000));
+axes.addMotor(new StepDirStepper(2, 5, 3200, StepDirStepper::NO_ENABLE_PIN, 1000));
+axes.addMotor(new StepDirStepper(3, 6, 3200, StepDirStepper::NO_ENABLE_PIN, 1000));
 ```
 
 An axis wired to its own EN pin keeps driving it itself, through
-`A4988Stepper::enable()` and `disable()`; construct the manager without a pin and
+`StepDirStepper::enable()` and `disable()`; construct the manager without a pin and
 those axes are untouched. A manager without a pin does no power management at
 all, which is the default.
 
@@ -256,7 +273,7 @@ turn with `F()` text kept in flash, and no `String` is built.
 ## Adding a motor type
 
 To support a different stepper driver chip, subclass `Stepper` and implement
-`applyDirection(bool)` and `pulseStep()` - see `A4988Stepper.h`. It can then join
+`applyDirection(bool)` and `pulseStep()` - see `StepDirStepper.h`. It can then join
 any `StepperManager` fleet.
 
 For a servo, subclass `AngularMotor` and implement `begin()` (hardware setup + drive to

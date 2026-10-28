@@ -74,7 +74,7 @@ public:
     bool has(uint8_t id) const { return id < count; }
 
     // Unchecked, for reaching subtype-specific methods on a known-good id:
-    //   static_cast<A4988Stepper&>(fleet[0]).getStepPin()
+    //   static_cast<StepDirStepper&>(fleet[0]).getStepPin()
     T& operator[](uint8_t id) { return *motors[id]; }
 
     // Checked variant: nullptr for an id that was never registered.
