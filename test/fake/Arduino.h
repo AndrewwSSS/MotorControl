@@ -167,6 +167,18 @@ inline size_t risingEdges(uint8_t pin) {
     return n;
 }
 
+// When each of those edges happened, for checking pulse spacing.
+inline std::vector<unsigned long> risingEdgeTimes(uint8_t pin) {
+    std::vector<unsigned long> times;
+    uint8_t last = LOW;
+    for (const PinWrite& w : state.writes) {
+        if (w.pin != pin) continue;
+        if (last == LOW && w.level == HIGH) times.push_back(w.atUs);
+        last = w.level;
+    }
+    return times;
+}
+
 inline void clearWrites() { state.writes.clear(); }
 
 inline const std::string& serialOutput() { return Serial.output; }
