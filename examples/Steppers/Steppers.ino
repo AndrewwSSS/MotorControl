@@ -1,5 +1,7 @@
 // Two step+dir axes sharing one EN line: the first homes against a limit
-// switch at start-up, then both swing back and forth under a speed ramp.
+// switch at start-up, then both swing back and forth under a speed ramp. X is
+// a StepDirStepper, the one-line form; Y is a Stepper built on an engine of its
+// own, the form that lets an axis pick its engine.
 //
 // Builds for the Uno (CNC Shield pins) and the ESP32 (the pin map from the
 // migration plan). scripts/check.sh compiles it for both, which is how the
@@ -9,6 +11,7 @@
 #include <Endstop.h>
 #include <Homing.h>
 #include <LinearRamp.h>
+#include <PolledEngine.h>
 #include <StepDirStepper.h>
 #include <StepperManager.h>
 
@@ -28,6 +31,8 @@ static constexpr uint16_t STEPS_PER_REV = 200 * 16;
 // Borrowed by the axes, so they live at file scope.
 Endstop xMin(X_LIMIT, Endstop::NORMALLY_CLOSED, Endstop::MIN);
 LinearRamp ramp(1000, 1000);   // ease in from 1000 us over 1000 steps
+PolledEngine yEngine(Y_STEP, Y_DIR, PolledEngine::NO_ENABLE_PIN, 200,
+                     PolledEngine::TB6600_PULSE_US);
 
 StepperManager axes(2, EN_PIN);
 
@@ -49,9 +54,7 @@ void setup() {
     x->setEndstop(&xMin);
     axes.addMotor(x);
 
-    axes.addMotor(new StepDirStepper(Y_STEP, Y_DIR, STEPS_PER_REV,
-                                     StepDirStepper::NO_ENABLE_PIN, 200,
-                                     StepDirStepper::TB6600_PULSE_US));
+    axes.addMotor(new Stepper(yEngine, STEPS_PER_REV));
 
     axes.setProfiles(&ramp);
     axes.setIdleRelease(200);

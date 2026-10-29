@@ -11,9 +11,13 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 | `src/AngularMotor.h` | Abstract base: target clamping, non-blocking move loop, state + `reachedTarget()` edge |
 | `src/ServoMotor.h` | Backed by the Arduino `Servo` library (one hardware PWM pin per motor) |
 | `src/PCA9685Servo.h` | Backed by a shared PCA9685 16-channel PWM driver over I2C |
-| `src/Stepper.h` | Abstract stepper base: position in steps from a base position, non-blocking step loop, `StepProfile` seam |
+| `src/Stepper.h` | One step-driven axis: what it should do - target, endstop guard, `MOVING`/`HOLD`, `reachedTarget()` - with the pulses left to its `StepEngine` |
+| `src/StepEngine.h` | Interface: how an axis's pulses get made. Owns position, target and the ramp |
+| `src/SoftEngine.h` | The engine code shared whenever our own code times the pulses: counting, ramp, endstop inhibit, `tick()` |
+| `src/PolledEngine.h` | A `SoftEngine` on step+dir pins, timed against `micros()` from `update()`; any board |
+| `src/StepProfile.h` | Interface for a speed profile: the interval before the next pulse |
 | `src/LinearRamp.h` | A `StepProfile` that eases each move in and out |
-| `src/StepDirStepper.h` | Stepper on any step+dir driver - A4988/DRV8825 (a CNC Shield socket), TB6600, DM542; owns only the pins and the driver timing |
+| `src/StepDirStepper.h` | A `Stepper` with its own `PolledEngine`, for any step+dir driver - A4988/DRV8825 (a CNC Shield socket), TB6600, DM542 |
 | `src/Endstop.h` | A limit switch on its own pin: NO/NC wiring, debounce, which end of travel it guards |
 | `src/Homing.h` | `homeAxis()`: finds an axis's base position against one of its endstops |
 | `src/MotorManager.h` | Owns a fixed-size fleet of actuators, addressed by index; the part that is the same for servos and steppers |
@@ -87,9 +91,41 @@ void loop() {
 }
 ```
 
+### Engines
+
+A `Stepper` decides what the axis does; a `StepEngine` makes the pulses. The
+split is there because there is more than one good way to make them, and the
+endstops, homing, ramp and fleet should not care which:
+
+| Engine | Pulses come from | Boards |
+| --- | --- | --- |
+| `PolledEngine` | `update()`, timed against `micros()` | any |
+| `FasEngine` (planned) | FastAccelStepper, in hardware | ESP32 |
+| `TimerEngine` (planned) | a hardware timer running our own `tick()` | ESP32 |
+
+`StepDirStepper` is a `Stepper` with a `PolledEngine` built in, which is why the
+examples above need no engine. To choose one, build the two apart; the engine is
+borrowed, so declare it at file scope like an endstop:
+
+```cpp
+#include "PolledEngine.h"
+#include "Stepper.h"
+
+PolledEngine xEngine(/*step*/ 2, /*dir*/ 5, PolledEngine::NO_ENABLE_PIN,
+                     /*stepIntervalUs*/ 1000);
+
+axes.addMotor(new Stepper(xEngine, /*stepsPerRev*/ 3200));
+```
+
+A polled engine is only as steady as the loop that calls it: anything that holds
+`loop()` up holds the next pulse up too. An engine that steps on its own
+(`stepsOnItsOwn()`) keeps going in between, and homing then checks on the axis
+once a millisecond instead of spinning on `update()`.
+
 ### Driver timing
 
-`StepDirStepper` drives any step+dir driver; what differs between them is timing.
+`PolledEngine` (and so `StepDirStepper`) drives any step+dir driver; what differs
+between them is timing.
 
 - **STEP pulse width** is the last constructor argument: `A4988_PULSE_US` (2 µs,
   the default, also fine for a DRV8825) or `TB6600_PULSE_US` (5 µs), or any
@@ -97,7 +133,8 @@ void loop() {
 - **DIR setup** - how long DIR settles before the next STEP edge - is
   `MC_DIR_SETUP_US`, 5 µs by default, and only spent when the direction
   changes. Set it per project with `build_flags = -D MC_DIR_SETUP_US=10`, or
-  override `applyDirection()` in a subclass for anything other than a fixed wait.
+  override `applyDirection()` in a `PolledEngine` subclass for anything other
+  than a fixed wait.
 
 An opto-isolated driver (TB6600, DM542) must be wired common-cathode - PUL-,
 DIR-, ENA- to GND and the + inputs to the pins - so that HIGH means active, as
@@ -126,7 +163,7 @@ axes.setStepInterval(0, 400);     // now the cruise speed, reached over the ramp
 profile decides how it gets there and back. `getCurrentInterval(id)` reports the
 pace right now, which is what shows a ramp working on a bench.
 
-Profiles are stateless and `const` - the move's state lives on the `Stepper` - so
+Profiles are stateless and `const` - the move's state lives in the engine - so
 one instance serves a whole fleet and costs each axis nothing but a pointer.
 `nullptr` (the default) is a flat interval, exactly as before.
 
@@ -212,7 +249,9 @@ axes.setIdleRelease(2000);      // release after 2 s at rest; 0 (default) never
 There is nothing to call before a move. `update()` energises the line as soon as
 any axis has steps outstanding and withholds the pulses until the drivers have
 come back up - a pulse sent into a driver that is still waking is a step the
-counter claims and the axis never took.
+counter claims and the axis never took. The hold is a gate in each engine
+(`StepEngine::allowPulses()`), shut while the line is released and while it
+wakes, so it also stops an engine that steps on its own.
 
 The line belongs to the manager rather than to an axis because it is one pin for
 the whole fleet: the CNC shield wires every socket to the same one, so no axis
@@ -272,15 +311,19 @@ turn with `F()` text kept in flash, and no `String` is built.
 
 ## Adding a motor type
 
-To support a different stepper driver chip, subclass `Stepper` and implement
-`applyDirection(bool)` and `pulseStep()` - see `StepDirStepper.h`. It can then join
-any `StepperManager` fleet.
+A different step+dir driver needs no code: give `PolledEngine` its pulse width,
+and `MC_DIR_SETUP_US` its DIR setup time. A different way of making pulses is a
+new `StepEngine`. If our own code still decides when each pulse is due, subclass
+`SoftEngine` and supply `begin()`, `service()`, `stepsOnItsOwn()`,
+`applyDirection(bool)` and `pulseStep()` - see `PolledEngine.h`. Otherwise
+implement `StepEngine` whole. Either way, any `Stepper` can drive it and any
+`StepperManager` fleet can hold that `Stepper`.
 
 For a servo, subclass `AngularMotor` and implement `begin()` (hardware setup + drive to
 the default angle) and `writeAngle(uint16_t)` (one hardware write). `AngularMotor`'s
 degree-by-degree `update()` suits anything that takes an absolute angle command;
 if it does not fit, the actuator probably wants its own root rather than an
-`update()` override - see `Stepper.h`.
+`update()` override - as `Stepper` is.
 
 A stepper that should be commanded in degrees and join a servo fleet is the one
 case that crosses over: implement `AngularMotor` and hold a `Stepper` underneath,
@@ -299,3 +342,18 @@ has to do around the fleet. `StepperManager` is the example - its `update()` is
 where the enable line is energised and the pulses withheld while the drivers come
 up - and because the base pair is protected, nothing can call past a subclass and
 skip that.
+
+## Tests
+
+The logic runs on the host against a fake Arduino core (`test/fake/`), so it is
+checked without a board:
+
+```sh
+pio test -e native     # unit tests only
+scripts/check.sh       # unit tests, plus the examples built for each board
+```
+
+`test/fake/FakeEngine.h` is a `StepEngine` with no pins, for testing `Stepper`,
+homing and the fleet on their own - both as a polled engine and as one that
+steps on its own. Projects that use the library have their own
+`scripts/check.sh`; run it after a library change too.

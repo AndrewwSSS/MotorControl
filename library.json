@@ -1,7 +1,7 @@
 {
   "name": "MotorControl",
-  "version": "0.1.0",
-  "description": "Actuator abstraction (hobby servo, PCA9685 servo, step+dir stepper) plus a manager that drives a fleet of them non-blockingly, with endstops and homing, idle power release and pluggable speed profiles.",
+  "version": "0.2.0",
+  "description": "Actuator abstraction (hobby servo, PCA9685 servo, stepper axes on pluggable step engines) plus a manager that drives a fleet of them non-blockingly, with endstops and homing, idle power release and pluggable speed profiles.",
   "keywords": "motor, servo, stepper, pca9685, a4988, endstop, homing, robotics",
   "frameworks": "arduino",
   "platforms": "*",
@@ -11,6 +11,9 @@
     "StepperManager.h",
     "AngularMotor.h",
     "Stepper.h",
+    "StepEngine.h",
+    "PolledEngine.h",
+    "StepDirStepper.h",
     "Endstop.h",
     "Homing.h",
     "LinearRamp.h"
