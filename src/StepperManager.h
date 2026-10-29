@@ -93,6 +93,7 @@ public:
             if (!powered) {
                 enabledAt = micros();
                 waking = true;
+                allowPulses(false);
             }
         }
 
