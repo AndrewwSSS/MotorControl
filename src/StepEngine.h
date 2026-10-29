@@ -92,6 +92,13 @@ public:
     // update() or to sleep while a move runs.
     virtual bool stepsOnItsOwn() const = 0;
 
+    // The fleet's gate: while it is shut no pulse may go out, though moves can
+    // still be commanded and wait. StepperManager shuts it whenever the drivers
+    // cannot take a pulse - released by the idle timer, or still waking after
+    // EN came back - because a pulse sent then is a step the counter claims but
+    // the axis never took. Open by default, so an axis outside a fleet runs.
+    virtual void allowPulses(bool allowed) = 0;
+
     // --- Driver enable -------------------------------------------------------
 
     // For an engine that owns its driver's EN pin. Most axes share one EN line

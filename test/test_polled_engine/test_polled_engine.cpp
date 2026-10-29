@@ -260,6 +260,21 @@ void test_set_position_redefines_where_it_is() {
     TEST_ASSERT_EQUAL(10, fake::risingEdges(STEP_PIN));
 }
 
+void test_a_shut_gate_holds_pulses_back_until_opened() {
+    PolledEngine engine(STEP_PIN, DIR_PIN, PolledEngine::NO_ENABLE_PIN, INTERVAL_US);
+    engine.begin();
+
+    engine.allowPulses(false);
+    engine.moveTo(5);
+    runFor(engine, 50000);
+    TEST_ASSERT_EQUAL(0, fake::risingEdges(STEP_PIN));
+    TEST_ASSERT_TRUE(engine.isRunning());   // the move waits, it is not dropped
+
+    engine.allowPulses(true);
+    runToEnd(engine);
+    TEST_ASSERT_EQUAL(5, fake::risingEdges(STEP_PIN));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_sets_up_the_pins_and_energises);
@@ -275,5 +290,6 @@ int main(int, char**) {
     RUN_TEST(test_stop_ramped_never_extends_a_move);
     RUN_TEST(test_a_move_added_in_flight_keeps_the_ramp_going);
     RUN_TEST(test_set_position_redefines_where_it_is);
+    RUN_TEST(test_a_shut_gate_holds_pulses_back_until_opened);
     return UNITY_END();
 }

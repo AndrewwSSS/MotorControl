@@ -91,6 +91,10 @@ public:
         inhibited = direction;
     }
 
+    void allowPulses(bool allowed) override {
+        pulsesAllowed = allowed;
+    }
+
 protected:
     explicit SoftEngine(unsigned long stepIntervalUs)
         : stepIntervalUs(stepIntervalUs),
@@ -99,12 +103,14 @@ protected:
           moveStartStep(0),
           profile_(nullptr),
           lastStepAt(0),
-          inhibited(0) {}
+          inhibited(0),
+          pulsesAllowed(true) {}
 
     // Emits at most one step pulse, if one is due at now, and says whether it
     // did. Never waits.
     bool tick(unsigned long now) {
         if (currentStep == targetStep) return false;
+        if (!pulsesAllowed) return false;
 
         int8_t dir = (targetStep > currentStep) ? 1 : -1;
 
@@ -145,4 +151,5 @@ protected:
     const StepProfile* profile_;  // borrowed; nullptr means a flat interval
     unsigned long lastStepAt;
     int8_t inhibited;             // the direction a pressed endstop forbids, or 0
+    bool pulsesAllowed;           // the fleet's gate, see StepEngine::allowPulses()
 };
