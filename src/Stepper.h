@@ -2,9 +2,21 @@
 #include <Arduino.h>
 #include "Log.h"
 #include "Endstop.h"
+#include "StepEngine.h"
 #include "StepProfile.h"
 
 
+// One step-driven axis: what it should do. Where to go, which end is blocked by
+// a pressed endstop, whether it is moving or holding, when it has arrived.
+// How the pulses get made is the StepEngine's business, so the same axis logic
+// runs on a polled loop, a hardware timer or FastAccelStepper - pick the engine
+// and hand it over:
+//
+//   PolledEngine xEngine(2, 5);
+//   Stepper x(xEngine, 3200);
+//
+// The engine is borrowed, not owned, like the endstops and the profile. For the
+// common case of a polled step+dir driver, StepDirStepper bundles the two.
 class Stepper {
 public:
     enum State {
@@ -12,75 +24,78 @@ public:
         HOLD
     };
 
+    // stepsPerRevolution is full steps x microsteps (200 x 16 = 3200 for a
+    // 1.8 deg/step motor at 1/16).
+    Stepper(StepEngine& engine, uint16_t stepsPerRevolution)
+        : engine(engine),
+          stepsPerRevolution(stepsPerRevolution),
+          state(HOLD),
+          justReached(false),
+          debugEnabled(false) {
+        endstops[0] = nullptr;
+        endstops[1] = nullptr;
+    }
+
     virtual ~Stepper() = default;
 
-    virtual void begin() {
+    void begin() {
+        engine.begin();
         setOrigin(0);
-        lastStepAt = 0;
 
         for (uint8_t i = 0; i < 2; i++) {
             if (endstops[i]) endstops[i]->begin();
         }
     }
 
-    // Emits at most one step pulse and returns immediately. Call repeatedly
-    // from loop(); movement is non-blocking.
-    virtual void update() {
+    // Returns immediately. Call repeatedly from loop(); movement is
+    // non-blocking. A polled engine makes at most one pulse per call.
+    void update() {
         updateEndstops();
 
-        if (currentStep == targetStep) {
+        if (!engine.isRunning()) {
             setState(HOLD);
             return;
         }
 
-        // Driving further onto a pressed endstop crashes the axis. Stop and
-        // hold; moving away from the switch stays allowed.
+        // Driving further onto a pressed endstop crashes the axis. The engine
+        // is told which way is blocked, so one that steps on its own refuses
+        // the pulse too; moving away from the switch stays allowed.
         Endstop* hit = blockingEndstop();
+        engine.inhibit(hit ? hit->getSide() : 0);
         if (hit) {
             MC_INFO(F("Endstop "), hit->sideName(), F(" on pin "), hit->getPin(),
-                    F(" stopped the axis at step "), currentStep);
-            stopHere();
+                    F(" stopped the axis at step "), engine.position());
+            engine.stopNow();
             setState(HOLD);
             return;
         }
 
-        unsigned long now = micros();
-        if (now - lastStepAt < currentInterval()) return;
-
-        bool forward = (targetStep > currentStep);
-        applyDirection(forward);
-        pulseStep();
-
-        currentStep += forward ? 1 : -1;
-        lastStepAt = now;
-        setState(MOVING);
-
-        if (debugEnabled) MC_TRACE(F("Current step: "), currentStep, F(" of "), targetStep);
+        if (engine.service()) {
+            setState(MOVING);
+            if (debugEnabled) MC_TRACE(F("Current step: "), engine.position(), F(" of "), engine.target());
+        } else if (engine.stepsOnItsOwn()) {
+            setState(engine.isRunning() ? MOVING : HOLD);
+        }
     }
 
     // Absolute move, in steps from the base position. May be negative.
     void moveToStep(long step) {
-        // A move commanded while the axis is already running composes onto the
-        // one in flight, so it keeps that move's starting point: restarting the
-        // ramp would slow a running axis back down to its starting speed.
-        if (currentStep == targetStep) moveStartStep = currentStep;
+        engine.moveTo(step);
 
-        targetStep = step;
-
-        if (debugEnabled) MC_DEBUG(F("Target step: "), targetStep);
+        if (debugEnabled) MC_DEBUG(F("Target step: "), engine.target());
     }
 
     // Relative move. Anchored on the target rather than the current position
     // so repeated jogs compose while a move is still in flight.
     void moveSteps(long deltaSteps) {
-        moveToStep(targetStep + deltaSteps);
+        moveToStep(engine.target() + deltaSteps);
     }
 
     // Cancels a move in flight by making the current position the target.
     // Immediate: the axis stops on the next pulse it was going to emit. This is
     // what an endstop hit wants, ramp or no ramp.
     void stopHere() {
-        moveToStep(currentStep);
+        moveToStep(engine.position());
     }
 
     // Brings the axis to rest over the profile's stopping distance instead of
@@ -88,32 +103,25 @@ public:
     // thing as stopHere() when there is no profile, and it never extends a move
     // that was already shorter than the stopping distance.
     void stopRamped() {
-        if (currentStep == targetStep) return;
+        if (!engine.isRunning()) return;
 
-        long left = targetStep - currentStep;
-        long dir = (left > 0) ? 1 : -1;
-        long span = profile ? profile->stopDistance() : 0;
-        long remaining = (left > 0) ? left : -left;
+        engine.stopRamped();
 
-        if (span > remaining) span = remaining;
-
-        moveToStep(currentStep + dir * span);
+        if (debugEnabled) MC_DEBUG(F("Target step: "), engine.target());
     }
 
     // Redefines where the axis believes it is
     void setOrigin(long step = 0) {
-        currentStep = step;
-        targetStep = step;
-        moveStartStep = step;
+        engine.setPosition(step);
         setState(HOLD);
     }
 
     long getStep() const {
-        return currentStep;
+        return engine.position();
     }
 
     long getTargetStep() const {
-        return targetStep;
+        return engine.target();
     }
 
     State getState() const {
@@ -148,42 +156,39 @@ public:
     // The profile is borrowed, not owned - it is expected to outlive the axis,
     // which a file-scope instance in the sketch does.
     void setProfile(const StepProfile* p) {
-        profile = p;
+        engine.setProfile(p);
     }
 
     const StepProfile* getProfile() const {
-        return profile;
+        return engine.profile();
     }
 
     // The interval the next pulse will actually wait out: the profile's idea of
     // the pace here, or the flat interval when there is no profile. Distinct
     // from getStepInterval(), which is the top speed the axis was asked for.
     unsigned long currentInterval() const {
-        if (!profile) return stepIntervalUs;
-
-        long done = currentStep - moveStartStep;
-        long left = targetStep - currentStep;
-
-        return profile->intervalFor((done > 0) ? done : -done,
-                                    (left > 0) ? left : -left,
-                                    stepIntervalUs);
+        return engine.currentInterval();
     }
 
     // Pulse spacing, i.e. speed. With a profile attached this is the top speed
     // the ramp works towards. Settable after construction because homing
     // switches between a fast seek and a slow, repeatable re-approach.
     void setStepInterval(unsigned long us) {
-        stepIntervalUs = us;
+        engine.setStepInterval(us);
     }
 
     unsigned long getStepInterval() const {
-        return stepIntervalUs;
+        return engine.stepInterval();
     }
 
     // The one piece of calibration a degree layer needs; unused by step-space
     // motion itself.
     uint16_t getStepsPerRevolution() const {
         return stepsPerRevolution;
+    }
+
+    StepEngine& getEngine() const {
+        return engine;
     }
 
     // Per-axis switch for the DEBUG and TRACE messages. Has no effect unless
@@ -197,30 +202,8 @@ public:
     }
 
 protected:
-    Stepper(uint16_t stepsPerRevolution, unsigned long stepIntervalUs)
-        : stepsPerRevolution(stepsPerRevolution),
-          stepIntervalUs(stepIntervalUs),
-          currentStep(0),
-          targetStep(0),
-          moveStartStep(0),
-          profile(nullptr),
-          lastStepAt(0),
-          state(HOLD),
-          justReached(false),
-          debugEnabled(false) {
-        endstops[0] = nullptr;
-        endstops[1] = nullptr;
-    }
-
-    // Sets the driver's direction input ahead of a pulse. forward means the
-    // step counter is about to increase.
-    virtual void applyDirection(bool forward) = 0;
-
-    // Emits exactly one step pulse.
-    virtual void pulseStep() = 0;
-
-    // Subclasses report motion through here rather than writing `state`, so
-    // the MOVING -> HOLD edge behind reachedTarget() is detected in one place.
+    // Motion is reported through here rather than by writing `state`, so the
+    // MOVING -> HOLD edge behind reachedTarget() is detected in one place.
     void setState(State newState) {
         if (newState == HOLD && state != HOLD) {
             justReached = true;
@@ -240,19 +223,13 @@ protected:
 
     // The pressed endstop in the direction of travel, if any.
     Endstop* blockingEndstop() const {
-        Endstop* ahead = endstops[(targetStep > currentStep) ? 1 : 0];
+        Endstop* ahead = endstops[(engine.target() > engine.position()) ? 1 : 0];
         return (ahead && ahead->isTriggered()) ? ahead : nullptr;
     }
 
+    StepEngine& engine;          // borrowed
     uint16_t stepsPerRevolution;
-    unsigned long stepIntervalUs;
-
-    long currentStep;
-    long targetStep;
-    long moveStartStep;          // where the move in flight began, for the ramp
-    const StepProfile* profile;  // borrowed; nullptr means a flat interval
     Endstop* endstops[2];        // borrowed; [0] MIN end, [1] MAX end
-    unsigned long lastStepAt;
 
     State state;
     bool justReached;
