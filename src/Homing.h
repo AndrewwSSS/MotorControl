@@ -181,6 +181,13 @@ inline HomingResult homeAxis(Stepper& axis, const HomingConfig& cfg) {
     // build on the target.
     axis.stopHere();
 
+    // The search runs past the soft limits by design: they are only right
+    // once it has found where step 0 is. Back on for good once it has, and as
+    // they were if it failed - a failed search moved the axis, but the counter
+    // still knows by how much.
+    bool wasArmed = axis.limitsArmed();
+    axis.armLimits(false);
+
     const StepProfile* saved = axis.getProfile();
     axis.setProfile(nullptr);
     HomingResult result = mc_homing::search(axis, *endstop, cfg);
@@ -190,6 +197,9 @@ inline HomingResult homeAxis(Stepper& axis, const HomingConfig& cfg) {
         MC_INFO(F("Homed, moving to rest step "), cfg.restStep);
         axis.moveToStep(cfg.restStep);
         mc_homing::drive(axis);
+        axis.armLimits(true);
+    } else {
+        axis.armLimits(wasArmed);
     }
 
     // The search settles the axis several times; none of that is a move the
