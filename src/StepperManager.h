@@ -93,10 +93,15 @@ public:
             if (!powered) {
                 enabledAt = micros();
                 waking = true;
+                allowPulses(false);
             }
         }
 
         powered = true;
+
+        // With a wake-up window open, ready() lets the pulses through once it
+        // closes; without one they can go now.
+        if (!waking) allowPulses(true);
     }
 
     void disable() {
@@ -104,6 +109,7 @@ public:
 
         powered = false;
         waking = false;
+        allowPulses(false);
     }
 
     bool isPowered() const {
@@ -246,7 +252,15 @@ private:
         if (micros() - enabledAt < wakeUs) return false;
 
         waking = false;
+        allowPulses(true);
         return true;
+    }
+
+    // Opens or shuts every axis's gate. Skipping update() while the drivers are
+    // not ready only holds back an engine that pulses from update(); one that
+    // steps on its own has to be told.
+    void allowPulses(bool allowed) {
+        for (uint8_t i = 0; i < count; i++) motors[i]->getEngine().allowPulses(allowed);
     }
 
     uint8_t       enablePin;

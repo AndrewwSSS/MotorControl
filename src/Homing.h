@@ -55,8 +55,18 @@ namespace mc_homing {
 // still applies, so a move towards a pressed switch ends there. The last
 // update() settles the axis into HOLD, which the loop alone would leave to the
 // caller's next update().
+//
+// A polled engine only steps when update() is called, so it gets called as
+// fast as the loop allows. An engine that steps on its own needs no help with
+// the pulses: checking once a millisecond still runs the endstop guard, and
+// leaves the CPU to everything else (on the ESP32, the other tasks).
 inline void drive(Stepper& axis) {
-    while (axis.getStep() != axis.getTargetStep()) axis.update();
+    bool own = axis.getEngine().stepsOnItsOwn();
+
+    while (axis.getStep() != axis.getTargetStep()) {
+        axis.update();
+        if (own) delay(1);
+    }
     axis.update();
 }
 

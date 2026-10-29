@@ -9,6 +9,7 @@
 #include "Homing.h"
 #include "LinearRamp.h"
 #include "StepDirStepper.h"
+#include "StepEngine.h"
 #include "StepperManager.h"
 
 void setUp() {

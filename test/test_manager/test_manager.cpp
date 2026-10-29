@@ -154,6 +154,50 @@ void test_reaching_the_target_calls_back_once() {
     TEST_ASSERT_EQUAL(5, fleet.manager.getStep(0));
 }
 
+// The gate lives in the engine, so it holds even for a caller that drives the
+// axis directly, without the fleet's update() - which is what an engine that
+// steps on its own amounts to.
+void test_the_gate_is_shut_while_released_and_while_waking() {
+    Fleet fleet;
+    Stepper& axis = fleet.manager[0];
+
+    runFor(fleet.manager, (IDLE_MS + 10) * 1000UL);
+    TEST_ASSERT_FALSE(fleet.manager.isPowered());
+    fake::clearWrites();
+
+    axis.moveSteps(5);
+    for (int i = 0; i < 500; i++) {
+        axis.update();
+        fake::advanceUs(10);
+    }
+    TEST_ASSERT_EQUAL(0, fake::risingEdges(STEP_PIN));
+
+    // Re-energised, but still inside the wake-up window: still shut.
+    fleet.manager.enable();
+    for (int i = 0; i < 90; i++) {
+        axis.update();
+        fake::advanceUs(10);
+    }
+    TEST_ASSERT_EQUAL(0, fake::risingEdges(STEP_PIN));
+
+    runUntilIdle(fleet.manager);
+    TEST_ASSERT_EQUAL(5, fake::risingEdges(STEP_PIN));
+}
+
+void test_without_an_enable_pin_the_gate_stays_open() {
+    StepperManager manager(1);
+    manager.addMotor(new StepDirStepper(STEP_PIN, DIR_PIN, 3200,
+                                        StepDirStepper::NO_ENABLE_PIN, 800));
+    manager.begin();
+
+    manager[0].moveSteps(3);
+    for (int i = 0; i < 500; i++) {
+        manager[0].update();
+        fake::advanceUs(10);
+    }
+    TEST_ASSERT_EQUAL(3, fake::risingEdges(STEP_PIN));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_energises_the_drivers);
@@ -162,5 +206,7 @@ int main(int, char**) {
     RUN_TEST(test_the_next_move_re_energises_and_waits_again);
     RUN_TEST(test_without_idle_release_en_stays_on);
     RUN_TEST(test_reaching_the_target_calls_back_once);
+    RUN_TEST(test_the_gate_is_shut_while_released_and_while_waking);
+    RUN_TEST(test_without_an_enable_pin_the_gate_stays_open);
     return UNITY_END();
 }
