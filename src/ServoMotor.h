@@ -1,12 +1,18 @@
 #pragma once
-#include <Servo.h>
 #include <Arduino.h>
+// The Arduino Servo library does not support the ESP32; ESP32Servo offers the
+// same Servo class on the chip's LEDC PWM.
+#if defined(ESP32)
+#include <ESP32Servo.h>
+#else
+#include <Servo.h>
+#endif
 #include "AngularMotor.h"
 #include "Log.h"
 
 
-// AngularMotor backed by the Arduino Servo library (one hardware PWM pin per
-// motor).
+// AngularMotor backed by the Arduino Servo library, or ESP32Servo on the ESP32
+// (one PWM pin per motor).
 class ServoMotor : public AngularMotor {
 public:
     ServoMotor(uint8_t pin, uint16_t defaultAngle = DEFAULT_ANGLE, uint16_t rotationDelay = DEFAULT_ROTATION_DELAY)
