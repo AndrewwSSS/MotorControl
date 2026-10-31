@@ -57,9 +57,13 @@ public:
     // Ground truth, bypassing the debounce lock-out. A homing run may start
     // within the debounce window of a previous one or of a knock, and opening
     // the search in the wrong phase from a stale reading wastes a pass.
+    //
+    // A reading is not an edge, so it opens no lock-out of its own: the next
+    // update() acts on a press at once. Dated one window back to say so - the
+    // unsigned subtraction in update() makes that safe at any millis().
     void resync() {
         triggered = readRaw();
-        lastChange = millis();
+        lastChange = millis() - DEBOUNCE_MS;
     }
 
     // Debounced state, as of the last update().

@@ -149,10 +149,12 @@ public:
     }
 
     // Redefines where an axis believes it is. Step 0 is then no longer the
-    // switch, so the axis stops counting as homed.
+    // switch, so the axis stops counting as homed. It is a place someone
+    // chose, though, so its soft limits are armed from here on.
     void setOrigin(uint8_t id, long step = 0) {
         if (id >= count) return;
         motors[id]->setOrigin(step);
+        motors[id]->armLimits(true);
         homing[id] = NOT_HOMED;
     }
 
@@ -219,6 +221,24 @@ public:
 
     void stopAllRamped() {
         for (uint8_t i = 0; i < count; i++) motors[i]->stopRamped();
+    }
+
+    // Soft limits, in steps - see Stepper::setLimits(). Armed by home() and
+    // setOrigin().
+    void setLimits(uint8_t id, long minStep, long maxStep) {
+        if (id < count) motors[id]->setLimits(minStep, maxStep);
+    }
+
+    void clearLimits(uint8_t id) {
+        if (id < count) motors[id]->clearLimits();
+    }
+
+    bool hasLimits(uint8_t id) const {
+        return (id < count) && motors[id]->hasLimits();
+    }
+
+    bool limitsArmed(uint8_t id) const {
+        return (id < count) && motors[id]->limitsArmed();
     }
 
     // Pulse spacing, i.e. speed. Per axis, because a fleet rarely shares one

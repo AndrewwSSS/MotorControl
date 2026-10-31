@@ -29,6 +29,10 @@ public:
     Stepper(StepEngine& engine, uint16_t stepsPerRevolution)
         : engine(engine),
           stepsPerRevolution(stepsPerRevolution),
+          minStep(0),
+          maxStep(0),
+          limited(false),
+          armed(false),
           state(HOLD),
           justReached(false),
           debugEnabled(false) {
@@ -79,10 +83,16 @@ public:
     }
 
     // Absolute move, in steps from the base position. May be negative.
+    // Refused, and logged, when armed soft limits put the target out of
+    // range - see setLimits().
     void moveToStep(long step) {
-        engine.moveTo(step);
+        if (!withinLimits(step)) {
+            MC_INFO(F("Move to step "), step, F(" refused: limits are "),
+                    minStep, F(".."), maxStep);
+            return;
+        }
 
-        if (debugEnabled) MC_DEBUG(F("Target step: "), engine.target());
+        setTarget(step);
     }
 
     // Relative move. Anchored on the target rather than the current position
@@ -95,7 +105,7 @@ public:
     // Immediate: the axis stops on the next pulse it was going to emit. This is
     // what an endstop hit wants, ramp or no ramp.
     void stopHere() {
-        moveToStep(engine.position());
+        setTarget(engine.position());
     }
 
     // Brings the axis to rest over the profile's stopping distance instead of
@@ -108,6 +118,58 @@ public:
         engine.stopRamped();
 
         if (debugEnabled) MC_DEBUG(F("Target step: "), engine.target());
+    }
+
+    // Soft limits: the range of steps the axis may be sent to. A move whose
+    // target lies outside it is refused, so the axis keeps the target it had.
+    // An axis already outside the range may still be sent back towards it;
+    // otherwise it could not be moved at all.
+    //
+    // Limits only mean something once step 0 is a known place, so they take
+    // effect only when armed: StepperManager arms them after a successful
+    // home() or a hand-set origin (setOrigin()). Before that, an axis
+    // without a switch could be anywhere and its limits would be wrong.
+    //
+    // A move already in flight past a new limit is cut short at the limit:
+    // it is running, so it can no longer be refused.
+    void setLimits(long minStep, long maxStep) {
+        if (minStep > maxStep) {
+            long t = minStep;
+            minStep = maxStep;
+            maxStep = t;
+        }
+
+        this->minStep = minStep;
+        this->maxStep = maxStep;
+        limited = true;
+        cutShortAtLimits();
+    }
+
+    void clearLimits() {
+        limited = false;
+    }
+
+    bool hasLimits() const {
+        return limited;
+    }
+
+    long getMinStep() const {
+        return minStep;
+    }
+
+    long getMaxStep() const {
+        return maxStep;
+    }
+
+    // Whether the limits are enforced. Homing disarms them for its search,
+    // which has to run past them to find the switch.
+    void armLimits(bool on = true) {
+        armed = on;
+        cutShortAtLimits();
+    }
+
+    bool limitsArmed() const {
+        return armed;
     }
 
     // Redefines where the axis believes it is
@@ -202,6 +264,32 @@ public:
     }
 
 protected:
+    void setTarget(long step) {
+        engine.moveTo(step);
+
+        if (debugEnabled) MC_DEBUG(F("Target step: "), engine.target());
+    }
+
+    // True when step may be the axis's target: in range, or no further out of
+    // range than the axis already is.
+    bool withinLimits(long step) const {
+        if (!limited || !armed) return true;
+        if (step >= minStep && step <= maxStep) return true;
+
+        long at = engine.position();
+        if (step < minStep) return at < minStep && step >= at;
+        return at > maxStep && step <= at;
+    }
+
+    void cutShortAtLimits() {
+        if (!limited || !armed || !engine.isRunning()) return;
+
+        long target = engine.target();
+        long at = engine.position();
+        if (target > maxStep && at <= maxStep) setTarget(maxStep);
+        if (target < minStep && at >= minStep) setTarget(minStep);
+    }
+
     // Motion is reported through here rather than by writing `state`, so the
     // MOVING -> HOLD edge behind reachedTarget() is detected in one place.
     void setState(State newState) {
@@ -230,6 +318,11 @@ protected:
     StepEngine& engine;          // borrowed
     uint16_t stepsPerRevolution;
     Endstop* endstops[2];        // borrowed; [0] MIN end, [1] MAX end
+
+    long minStep;                // soft limits, see setLimits()
+    long maxStep;
+    bool limited;
+    bool armed;
 
     State state;
     bool justReached;

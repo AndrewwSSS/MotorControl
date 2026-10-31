@@ -232,6 +232,57 @@ void test_a_min_switch_only_guards_travel_downwards() {
     TEST_ASSERT_EQUAL(5, axis.getStep());
 }
 
+// A resync is a reading, not an edge: it must not blind the guard. Homing
+// opens every search with one, and starting close to the switch used to
+// overshoot by up to 5 ms of travel.
+void test_a_press_straight_after_a_resync_is_seen() {
+    Endstop maxSwitch(SWITCH_PIN, Endstop::NORMALLY_OPEN, Endstop::MAX);
+    maxSwitch.begin();
+    fake::advanceMs(100);
+
+    maxSwitch.resync();
+    fake::advanceMs(1);
+    fake::setInput(SWITCH_PIN, LOW);
+    maxSwitch.update();
+
+    TEST_ASSERT_TRUE(maxSwitch.isTriggered());
+}
+
+void test_the_guard_sees_a_press_in_the_first_steps_after_begin() {
+    Endstop maxSwitch(SWITCH_PIN, Endstop::NORMALLY_OPEN, Endstop::MAX);
+    StepDirStepper axis(STEP_PIN, DIR_PIN, 3200, StepDirStepper::NO_ENABLE_PIN, 200);
+    axis.setEndstop(&maxSwitch);
+    axis.begin();
+
+    axis.moveSteps(100);
+    runUntilStep(axis, 2);   // 0.4 ms in, well inside the old 5 ms blind spot
+    fake::setInput(SWITCH_PIN, LOW);
+    runFor(axis, 10000);
+
+    TEST_ASSERT_EQUAL(2, axis.getStep());
+}
+
+// The debounce itself still holds: once a change has been seen, the contacts
+// get their 5 ms to settle.
+void test_bounce_after_a_real_edge_is_still_ignored() {
+    Endstop maxSwitch(SWITCH_PIN, Endstop::NORMALLY_OPEN, Endstop::MAX);
+    maxSwitch.begin();
+    fake::advanceMs(100);
+
+    fake::setInput(SWITCH_PIN, LOW);
+    maxSwitch.update();
+    TEST_ASSERT_TRUE(maxSwitch.isTriggered());
+
+    fake::advanceMs(2);
+    fake::setInput(SWITCH_PIN, HIGH);   // a bounce
+    maxSwitch.update();
+    TEST_ASSERT_TRUE(maxSwitch.isTriggered());
+
+    fake::advanceMs(4);                 // 6 ms after the edge: settled
+    maxSwitch.update();
+    TEST_ASSERT_FALSE(maxSwitch.isTriggered());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_a_move_of_n_steps_emits_n_pulses);
@@ -244,5 +295,8 @@ int main(int, char**) {
     RUN_TEST(test_endstop_stops_travel_onto_a_pressed_switch);
     RUN_TEST(test_endstop_allows_travel_away_from_a_pressed_switch);
     RUN_TEST(test_a_min_switch_only_guards_travel_downwards);
+    RUN_TEST(test_a_press_straight_after_a_resync_is_seen);
+    RUN_TEST(test_the_guard_sees_a_press_in_the_first_steps_after_begin);
+    RUN_TEST(test_bounce_after_a_real_edge_is_still_ignored);
     return UNITY_END();
 }
