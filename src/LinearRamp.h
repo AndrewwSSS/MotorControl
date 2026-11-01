@@ -47,6 +47,23 @@ public:
         return rampSteps;
     }
 
+    // The acceleration that covers the same change of speed over the same
+    // rampSteps: (v_top^2 - v_start^2) / (2 * rampSteps), each speed being
+    // 1,000,000 / interval in steps/s. Not exact, because this ramp is linear
+    // in interval rather than in speed, but the move starts, cruises and ends
+    // in the same places. 1000us down to 200us over 1000 steps is 12,000.
+    //
+    // Integers only, so the Uno does not pull in float maths for a method only
+    // the ESP32 calls. Capped at the largest uint32_t rather than wrapping.
+    uint32_t accelerationFor(unsigned long cruiseUs) const override {
+        if (cruiseUs == 0 || startIntervalUs <= cruiseUs) return 0;   // nothing to ramp
+
+        uint64_t top   = 1000000UL / cruiseUs;
+        uint64_t start = 1000000UL / startIntervalUs;
+        uint64_t a = (top * top - start * start) / (2UL * rampSteps);
+        return (a > UINT32_MAX) ? UINT32_MAX : (uint32_t)a;
+    }
+
     // Tunable on the fly, which is how a ramp length gets found on a bench.
     // Shared instance, so this moves every axis using it.
     void setRampSteps(uint16_t steps) {

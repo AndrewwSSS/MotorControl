@@ -76,6 +76,46 @@ void test_stop_distance_is_the_ramp_length() {
     TEST_ASSERT_EQUAL(1, ramp.getRampSteps());
 }
 
+// --- As one acceleration, for FasEngine ----------------------------------------
+
+void test_the_rig_ramp_is_12000_steps_per_s2() {
+    LinearRamp ramp(1000, 1000);
+    // (5000^2 - 1000^2) / (2 * 1000)
+    TEST_ASSERT_EQUAL_UINT32(12000, ramp.accelerationFor(CRUISE_US));
+}
+
+void test_the_acceleration_follows_the_ramp_and_the_cruise() {
+    LinearRamp ramp(4000, 300);
+    // (1000^2 - 250^2) / 600 = 1562.5, rounded down
+    TEST_ASSERT_EQUAL_UINT32(1562, ramp.accelerationFor(1000));
+
+    ramp.setRampSteps(150);   // half the distance, twice the acceleration
+    TEST_ASSERT_EQUAL_UINT32(3125, ramp.accelerationFor(1000));
+}
+
+void test_no_acceleration_when_there_is_nothing_to_ramp() {
+    LinearRamp ramp(150, 1000);
+    TEST_ASSERT_EQUAL_UINT32(0, ramp.accelerationFor(CRUISE_US));
+    TEST_ASSERT_EQUAL_UINT32(0, LinearRamp(1000, 1000).accelerationFor(0));
+}
+
+void test_an_absurd_ramp_is_capped_rather_than_wrapping() {
+    LinearRamp ramp(1000, 1);
+    // 1 us cruise over a single step is 5 * 10^11 steps/s^2, past 32 bits.
+    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, ramp.accelerationFor(1));
+}
+
+struct FlatProfile : StepProfile {
+    unsigned long intervalFor(long, long, unsigned long cruiseUs) const override {
+        return cruiseUs;
+    }
+};
+
+void test_a_profile_without_a_ramp_says_zero() {
+    FlatProfile flat;
+    TEST_ASSERT_EQUAL_UINT32(0, flat.accelerationFor(CRUISE_US));
+}
+
 void test_a_stepper_paces_its_pulses_by_the_ramp() {
     LinearRamp ramp(1000, 10);
     StepDirStepper axis(STEP_PIN, DIR_PIN, 3200, StepDirStepper::NO_ENABLE_PIN, CRUISE_US);
@@ -170,6 +210,11 @@ int main(int, char**) {
     RUN_TEST(test_a_short_move_peaks_where_the_two_ends_meet);
     RUN_TEST(test_no_ramp_when_the_start_is_not_slower_than_cruise);
     RUN_TEST(test_stop_distance_is_the_ramp_length);
+    RUN_TEST(test_the_rig_ramp_is_12000_steps_per_s2);
+    RUN_TEST(test_the_acceleration_follows_the_ramp_and_the_cruise);
+    RUN_TEST(test_no_acceleration_when_there_is_nothing_to_ramp);
+    RUN_TEST(test_an_absurd_ramp_is_capped_rather_than_wrapping);
+    RUN_TEST(test_a_profile_without_a_ramp_says_zero);
     RUN_TEST(test_a_stepper_paces_its_pulses_by_the_ramp);
     RUN_TEST(test_stop_ramped_comes_to_rest_over_the_ramp);
     RUN_TEST(test_stop_ramped_never_extends_a_move);
