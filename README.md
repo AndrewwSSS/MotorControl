@@ -17,7 +17,8 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 | `src/PolledEngine.h` | A `SoftEngine` on step+dir pins, timed against `micros()` from `update()`; any board |
 | `src/StepProfile.h` | Interface for a speed profile: the interval before the next pulse |
 | `src/LinearRamp.h` | A `StepProfile` that eases each move in and out |
-| `src/StepDirStepper.h` | A `Stepper` with its own `PolledEngine`, for any step+dir driver - A4988/DRV8825 (a CNC Shield socket), TB6600, DM542 |
+| `src/EngineStepper.h` | A `Stepper` that owns its engine, of any kind: one `new` gives a whole axis |
+| `src/StepDirStepper.h` | An `EngineStepper<PolledEngine>`, for any step+dir driver - A4988/DRV8825 (a CNC Shield socket), TB6600, DM542 |
 | `src/Endstop.h` | A limit switch on its own pin: NO/NC wiring, debounce, which end of travel it guards |
 | `src/Homing.h` | `homeAxis()`: finds an axis's base position against one of its endstops |
 | `src/MotorManager.h` | Owns a fixed-size fleet of actuators, addressed by index; the part that is the same for servos and steppers |
@@ -104,8 +105,19 @@ endstops, homing, ramp and fleet should not care which:
 | `TimerEngine` (planned) | a hardware timer running our own `tick()` | ESP32 |
 
 `StepDirStepper` is a `Stepper` with a `PolledEngine` built in, which is why the
-examples above need no engine. To choose one, build the two apart; the engine is
-borrowed, so declare it at file scope like an endstop:
+examples above need no engine. To choose one, name it in an `EngineStepper`; the
+arguments after the steps per revolution go to the engine:
+
+```cpp
+#include "EngineStepper.h"
+#include "PolledEngine.h"
+
+axes.addMotor(new EngineStepper<PolledEngine>(/*stepsPerRev*/ 3200,
+                                              /*step*/ 2, /*dir*/ 5));
+```
+
+Or build the two apart, when the engine has to live somewhere else; a plain
+`Stepper` borrows its engine, so declare it at file scope like an endstop:
 
 ```cpp
 #include "PolledEngine.h"
