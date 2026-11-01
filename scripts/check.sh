@@ -36,4 +36,10 @@ step "Example: Servos (uno)"
     --project-option "lib_deps = arduino-libraries/Servo@^1.3.0, adafruit/Adafruit PWM Servo Driver Library@^3.0.3" \
     --board uno
 
+step "Example: Servos (esp32)"
+"$PIO" ci examples/Servos/Servos.ino "${ci_opts[@]}" \
+    --project-option "platform = espressif32@7.0.1" \
+    --project-option "lib_deps = madhephaestus/ESP32Servo@^3.2.1, adafruit/Adafruit PWM Servo Driver Library@^3.0.3" \
+    --board esp32dev
+
 step "All green"

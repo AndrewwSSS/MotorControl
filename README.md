@@ -9,7 +9,7 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 | File | Role |
 | --- | --- |
 | `src/AngularMotor.h` | Abstract base: target clamping, non-blocking move loop, state + `reachedTarget()` edge |
-| `src/ServoMotor.h` | Backed by the Arduino `Servo` library (one hardware PWM pin per motor) |
+| `src/ServoMotor.h` | Backed by the Arduino `Servo` library, or `ESP32Servo` on the ESP32 (one PWM pin per motor) |
 | `src/PCA9685Servo.h` | Backed by a shared PCA9685 16-channel PWM driver over I2C |
 | `src/Stepper.h` | One step-driven axis: what it should do - target, endstop guard, `MOVING`/`HOLD`, `reachedTarget()` - with the pulses left to its `StepEngine` |
 | `src/StepEngine.h` | Interface: how an axis's pulses get made. Owns position, target and the ramp |

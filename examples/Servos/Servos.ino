@@ -1,8 +1,8 @@
 // A hobby servo on its own pin and one on a PCA9685 channel, in one fleet,
 // sweeping between two angles.
 //
-// Uno only for now: ServoMotor is built on the Arduino Servo library, which
-// does not support the ESP32. scripts/check.sh compiles it for the Uno.
+// Builds for the Uno and the ESP32; scripts/check.sh compiles it for both.
+// On the ESP32 the PCA9685 sits on the default I2C pins, SDA 21 and SCL 22.
 
 #include <Arduino.h>
 #include <Adafruit_PWMServoDriver.h>
@@ -10,7 +10,12 @@
 #include <ServoManager.h>
 #include <ServoMotor.h>
 
+// GPIO 9 is wired to the flash on an ESP32 module.
+#if defined(ESP32)
+static constexpr uint8_t SERVO_PIN = 13;
+#else
 static constexpr uint8_t SERVO_PIN = 9;
+#endif
 static constexpr uint8_t PCA_CHANNEL = 0;
 
 static constexpr int SWEEP_LOW = 30;
