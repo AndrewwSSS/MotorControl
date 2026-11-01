@@ -2,13 +2,6 @@
 #include <Arduino.h>
 #include "SoftEngine.h"
 
-// How long DIR must have settled before the next STEP edge, in microseconds.
-// Only paid when the direction actually changes, never per step. 5 us covers
-// the opto-isolated drivers (TB6600, DM542), which are the slow ones
-#ifndef MC_DIR_SETUP_US
-#define MC_DIR_SETUP_US 5
-#endif
-
 // Makes pulses on a step+dir driver's pins, each one timed against micros()
 // when update() comes round: A4988, DRV8825, TB6600, DM542 and the like. They
 // differ only in timing, which is the pulse width below and the DIR setup

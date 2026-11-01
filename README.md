@@ -15,6 +15,7 @@ its sketch (Bluetooth protocol, playback, serial jog console).
 | `src/StepEngine.h` | Interface: how an axis's pulses get made. Owns position, target and the ramp |
 | `src/SoftEngine.h` | The engine code shared whenever our own code times the pulses: counting, ramp, endstop inhibit, `tick()` |
 | `src/PolledEngine.h` | A `SoftEngine` on step+dir pins, timed against `micros()` from `update()`; any board |
+| `src/FasEngine.h` | A `StepEngine` on FastAccelStepper: pulses and ramp in hardware. ESP32; the sketch adds the library |
 | `src/StepProfile.h` | Interface for a speed profile: the interval before the next pulse |
 | `src/LinearRamp.h` | A `StepProfile` that eases each move in and out |
 | `src/EngineStepper.h` | A `Stepper` that owns its engine, of any kind: one `new` gives a whole axis |
@@ -101,7 +102,7 @@ endstops, homing, ramp and fleet should not care which:
 | Engine | Pulses come from | Boards |
 | --- | --- | --- |
 | `PolledEngine` | `update()`, timed against `micros()` | any |
-| `FasEngine` (planned) | FastAccelStepper, in hardware | ESP32 |
+| `FasEngine` | FastAccelStepper, in hardware | ESP32, with `gin66/FastAccelStepper@1.4.0` in the sketch's `lib_deps` |
 | `TimerEngine` (planned) | a hardware timer running our own `tick()` | ESP32 |
 
 `StepDirStepper` is a `Stepper` with a `PolledEngine` built in, which is why the
@@ -133,6 +134,11 @@ A polled engine is only as steady as the loop that calls it: anything that holds
 `loop()` up holds the next pulse up too. An engine that steps on its own
 (`stepsOnItsOwn()`) keeps going in between, and homing then checks on the axis
 once a millisecond instead of spinning on `update()`.
+
+`FasEngine` is such an engine. Its STEP pulse is half the step interval, so it
+takes no pulse width, and its ramp is the profile's `accelerationFor()`. A move
+that reverses a running one ramps down first and then goes back, where a polled
+engine reverses at full speed. See `examples/FasEngine`.
 
 ### Driver timing
 
