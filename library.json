@@ -1,6 +1,6 @@
 {
   "name": "MotorControl",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "description": "Actuator abstraction (hobby servo, PCA9685 servo, stepper axes on pluggable step engines) plus a manager that drives a fleet of them non-blockingly, with endstops and homing, idle power release and pluggable speed profiles.",
   "keywords": "motor, servo, stepper, pca9685, a4988, endstop, homing, robotics",
