@@ -13,6 +13,7 @@
     "Stepper.h",
     "StepEngine.h",
     "PolledEngine.h",
+    "FasEngine.h",
     "EngineStepper.h",
     "StepDirStepper.h",
     "Endstop.h",

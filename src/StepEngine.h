@@ -2,6 +2,13 @@
 #include <Arduino.h>
 #include "StepProfile.h"
 
+// How long DIR must have settled before the next STEP edge, in microseconds.
+// Only paid when the direction actually changes, never per step. 5 us covers
+// the opto-isolated drivers (TB6600, DM542), which are the slow ones
+#ifndef MC_DIR_SETUP_US
+#define MC_DIR_SETUP_US 5
+#endif
+
 
 
 // A StepEngine is responsible for making the actual step pulses.

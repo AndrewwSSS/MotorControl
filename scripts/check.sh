@@ -42,4 +42,10 @@ step "Example: Servos (esp32)"
     --project-option "lib_deps = madhephaestus/ESP32Servo@^3.2.1, adafruit/Adafruit PWM Servo Driver Library@^3.0.3" \
     --board esp32dev
 
+step "Example: FasEngine (esp32, FastAccelStepper 1.4.0)"
+"$PIO" ci examples/FasEngine/FasEngine.ino "${ci_opts[@]}" \
+    --project-option "platform = espressif32@7.0.1" \
+    --project-option "lib_deps = gin66/FastAccelStepper@1.4.0" \
+    --board esp32dev
+
 step "All green"

@@ -23,4 +23,12 @@ public:
     // Steps needed to come to rest from full speed, for stopRamped(). 0 says
     // the axis can stop dead.
     virtual long stopDistance() const { return 0; }
+
+    // The same profile as one constant acceleration, in steps/s^2, for engines
+    // that ramp in hardware from a single number (FastAccelStepper). 0 says
+    // there is no ramp: start and stop at full speed.
+    virtual uint32_t accelerationFor(unsigned long cruiseUs) const {
+        (void)cruiseUs;
+        return 0;
+    }
 };
