@@ -11,7 +11,7 @@ endstops, homing, ramp and fleet should not care which:
 | `TimerEngine` (planned) | a hardware timer running our own `tick()` | ESP32 |
 
 `StepDirStepper` is a `Stepper` with a `PolledEngine` built in, which is why the
-[README](../README.md) examples need no engine. To choose one, name it in an `EngineStepper`; the
+[usage](usage.md) examples need no engine. To choose one, name it in an `EngineStepper`; the
 arguments after the steps per revolution go to the engine:
 
 ```cpp
