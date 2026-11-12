@@ -7,7 +7,8 @@
 A header-only Arduino / PlatformIO library that drives a fleet of servos and
 stepper axes without blocking `loop()`: endstops, two-pass homing, speed ramps,
 soft limits and idle power release, with the pulse generation swappable per axis.
-It runs two robotic arms and a CNC-shield test rig.
+It drives [scara-arm](https://github.com/AndrewwSSS/scara-arm), a 3D-printed
+SCARA robot, along with a servo arm and a test rig.
 
 <!-- Demo GIF goes here: ![Homing and moving](docs/media/demo.gif) -->
 

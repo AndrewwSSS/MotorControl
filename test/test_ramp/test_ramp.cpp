@@ -1,6 +1,5 @@
-// Characterisation of LinearRamp, on its own and as a Stepper actually paces
-// pulses with it. Uses the ramp the BigHardDick rig runs: 1000 us down to a
-// 200 us cruise over 1000 steps.
+// LinearRamp on its own and as a Stepper paces pulses with it, using a
+// 1000 us start, a 200 us cruise and 1000 ramp steps.
 
 #include <unity.h>
 #include <Arduino.h>
