@@ -4,22 +4,8 @@
 #include "Endstop.h"
 #include "Stepper.h"
 
-// Homing: earning a base position against an endstop instead of assuming one.
-//
-// Stepper::begin() can only declare "wherever the shaft is now is step 0",
-// which is an assumption that silently poisons every later position if it is
-// wrong. homeAxis() drives the axis onto the endstop at one end, makes the trip
-// point step 0, and parks at the configured rest step. Afterwards step 0 is a
-// real, repeatable place on the machine.
-//
-// The search is two-pass. The trip point of a snap-action switch is only
-// repeatable at low speed - approach it fast and the contact closes a little
-// further along each time, by an amount that varies with speed. So the seek
-// pass finds it quickly, the axis backs off to release it, and a slow
-// re-approach takes the reading that actually sets the base position.
-//
-// Works with any Stepper subtype: it only needs an Endstop attached on the
-// side it homes towards.
+// Two-pass homing against an endstop: fast seek, back off, slow re-approach.
+// The trip point becomes step 0. See docs/homing.md.
 
 struct HomingConfig {
     Endstop::Side towards;          // the end whose switch sets step 0
@@ -51,15 +37,8 @@ inline const __FlashStringHelper* homingResultName(HomingResult r) {
 
 namespace mc_homing {
 
-// Runs the current move to its end. The endstop guard in Stepper::update()
-// still applies, so a move towards a pressed switch ends there. The last
-// update() settles the axis into HOLD, which the loop alone would leave to the
-// caller's next update().
-//
-// A polled engine only steps when update() is called, so it gets called as
-// fast as the loop allows. An engine that steps on its own needs no help with
-// the pulses: checking once a millisecond still runs the endstop guard, and
-// leaves the CPU to everything else (on the ESP32, the other tasks).
+// Runs the current move to its end, endstop guard included, and settles HOLD.
+// Self-stepping engines are checked once a millisecond instead of spinning.
 inline void drive(Stepper& axis) {
     bool own = axis.getEngine().stepsOnItsOwn();
 
@@ -77,12 +56,8 @@ inline bool driveUntilTriggered(Stepper& axis, Endstop& endstop) {
     return endstop.isTriggered();
 }
 
-// Retreats away from the switch until it releases, in backoffSteps
-// increments. A fixed retreat is not enough: the axis can power up further past
-// the trip point than any single increment - shoved there by hand, or left
-// there by a previous failed run - and would then never clear. Bounded by the
-// seek allowance so a contact stuck closed fails instead of driving the axis
-// off the far end. Returns the distance travelled, 0 on failure.
+// Retreats in backoffSteps increments until the switch releases, bounded by
+// maxSteps. Returns the distance travelled, 0 on failure.
 inline long backOffUntilClear(Stepper& axis, Endstop& endstop, const HomingConfig& cfg) {
     long travelled = 0;
 
@@ -91,9 +66,7 @@ inline long backOffUntilClear(Stepper& axis, Endstop& endstop, const HomingConfi
         axis.moveToStep(target);
         drive(axis);
 
-        // Cut short means the endstop at the other end stopped the retreat:
-        // the axis is pinned between two "pressed" switches, which is a wiring
-        // fault, not something more retreating will fix.
+        // Stopped by the other endstop: both read pressed, a wiring fault.
         if (axis.getStep() != target) {
             MC_ERROR(F("Homing: backing off ran into the opposite endstop"));
             return 0;
@@ -110,9 +83,7 @@ inline long backOffUntilClear(Stepper& axis, Endstop& endstop, const HomingConfi
 inline HomingResult search(Stepper& axis, Endstop& endstop, const HomingConfig& cfg) {
     endstop.resync();
 
-    // Starting already on the switch leaves the seek pass nothing to find, so
-    // skip to the back-off. Either way the base position is set from a fresh
-    // closing edge during the slow re-approach.
+    // Already on the switch: skip the seek and back off first.
     if (!endstop.isTriggered()) {
         axis.moveSteps((long)cfg.towards * cfg.maxSteps);
 
@@ -137,8 +108,7 @@ inline HomingResult search(Stepper& axis, Endstop& endstop, const HomingConfig& 
 
     unsigned long fast = axis.getStepInterval();
     axis.setStepInterval(cfg.slowIntervalUs);
-    // Allowance covers the retreat plus a margin, so a long retreat still
-    // leaves enough travel to reach the switch again.
+    // Allow the retreat distance plus a margin to reach the switch again.
     axis.moveSteps((long)cfg.towards * (backedOff + cfg.backoffSteps));
     bool hit = driveUntilTriggered(axis, endstop);
     axis.setStepInterval(fast);
@@ -157,15 +127,8 @@ inline HomingResult search(Stepper& axis, Endstop& endstop, const HomingConfig& 
 
 }
 
-// Runs the search, then drives to cfg.restStep. Blocking: homing is a start-up
-// operation, and until it finishes there is no position worth reporting. A
-// failed search leaves the axis where it stopped and says why rather than
-// pretending. The driver must already be energised - StepperManager::home()
-// sees to that.
-//
-// The speed profile is detached for the search: the trip point is only
-// repeatable at a constant low speed, which is the whole reason for the slow
-// pass. It is back in place for the move to the rest step.
+// Runs the search, then moves to cfg.restStep. Blocking. A failure leaves the
+// axis where it stopped. The driver must be energised (StepperManager::home()).
 inline HomingResult homeAxis(Stepper& axis, const HomingConfig& cfg) {
     Endstop* endstop = axis.getEndstop(cfg.towards);
     if (!endstop) {
@@ -176,15 +139,10 @@ inline HomingResult homeAxis(Stepper& axis, const HomingConfig& cfg) {
     MC_INFO(F("Homing towards "), endstop->sideName(),
             F(" endstop on pin "), endstop->getPin());
 
-    // Homing can be asked for at any time, not only at start-up. A move still
-    // in flight would otherwise be added to the seek, since relative moves
-    // build on the target.
+    // Cancel any move in flight; relative moves would otherwise add to the seek.
     axis.stopHere();
 
-    // The search runs past the soft limits by design: they are only right
-    // once it has found where step 0 is. Back on for good once it has, and as
-    // they were if it failed - a failed search moved the axis, but the counter
-    // still knows by how much.
+    // The search runs past the soft limits; re-armed on success, restored on failure.
     bool wasArmed = axis.limitsArmed();
     axis.armLimits(false);
 
@@ -202,8 +160,7 @@ inline HomingResult homeAxis(Stepper& axis, const HomingConfig& cfg) {
         axis.armLimits(wasArmed);
     }
 
-    // The search settles the axis several times; none of that is a move the
-    // caller commanded, so swallow the edge rather than fire a reached callback.
+    // The search's own stops are not commanded moves: swallow the reached edge.
     axis.reachedTarget();
     return result;
 }

@@ -3,8 +3,7 @@
 #include "Log.h"
 
 
-// Common interface for any angle-driven actuator (hobby servo, PCA9685-driven
-// servo, geared stepper acting as a joint, ...).
+// Base for angle-driven actuators (hobby servo, PCA9685 servo, geared joint).
 class AngularMotor {
 public:
     enum State {
@@ -17,8 +16,7 @@ public:
     // Attaches/initializes the underlying hardware and drives it to defaultAngle.
     virtual void begin() = 0;
 
-    // Advances the motor towards targetAngle. Must be called repeatedly (e.g.
-    // from loop()).
+    // Moves towards targetAngle; call from loop().
     virtual void update() {
         if (currentAngle == targetAngle) {
             setState(HOLD);
@@ -53,8 +51,7 @@ public:
         return this->currentAngle;
     }
 
-    // Per-motor switch for the DEBUG and TRACE messages. Has no effect unless
-    // MC_LOG_LEVEL compiles them in - see Log.h.
+    // Per-motor DEBUG/TRACE output, if MC_LOG_LEVEL compiles it in.
     void toggleDebug() {
         this->debugEnabled = !this->debugEnabled;
     }
@@ -67,9 +64,7 @@ public:
         return this->state;
     }
 
-    // True exactly once, the first time this is polled after the motor
-    // settles into HOLD. Lets a manager fire a "reached" callback without
-    // keeping its own shadow copy of every motor's previous state.
+    // True once, on the first poll after the motor settles into HOLD.
     bool reachedTarget() {
         bool r = justReached;
         justReached = false;
@@ -77,9 +72,7 @@ public:
     }
 
 protected:
-    // rotationDelay is the time between 1-degree steps in the default update()
-    // loop (lower = faster sweep speed). Subclasses with their own update()
-    // override can ignore it.
+    // rotationDelay: ms between 1-degree steps in the default update().
     explicit AngularMotor(
         uint16_t defaultAngle,
         uint16_t rotationDelay = DEFAULT_ROTATION_DELAY,
@@ -102,9 +95,7 @@ protected:
     static constexpr uint16_t MAX_ANGLE = 180;
     static constexpr uint16_t DEFAULT_ROTATION_DELAY = 20; // ms
 
-    // Derived classes report motion state through here instead of writing
-    // `state` directly, so the MOVING -> HOLD edge (used by reachedTarget())
-    // is only ever detected in one place.
+    // The only writer of `state`, so the HOLD edge is detected in one place.
     void setState(State newState) {
         if (newState == HOLD && state != HOLD) {
             justReached = true;
@@ -112,8 +103,7 @@ protected:
         state = newState;
     }
 
-    // Physically drives the actuator to the given angle. Called from
-    // update() on every step and from begin() to reach the initial position.
+    // One hardware write to the given angle.
     virtual void writeAngle(uint16_t angle) = 0;
 
     bool debugEnabled = false;
