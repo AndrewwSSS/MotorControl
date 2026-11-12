@@ -12,8 +12,7 @@ class StepperManager : public MotorManager<Stepper> {
 public:
     static constexpr uint8_t NO_ENABLE_PIN = 0xFF;
 
-    // Time the drivers are given to bring their outputs back up after the EN
-    // line is energised, before the first pulse is sent.
+    // Driver wake-up time after EN is energised, before the first pulse.
     static constexpr unsigned long DEFAULT_WAKE_US = 1000;
 
     explicit StepperManager(uint8_t capacity, uint8_t enablePin = NO_ENABLE_PIN)
@@ -29,8 +28,7 @@ public:
         delete[] homing;
     }
 
-    // Energises the drivers and sets up every axis, endstop pins included.
-    // Homing is a separate, explicit step: home().
+    // Energises the drivers and sets up every axis. Homing is separate: home().
     void begin() {
         if (enablePin != NO_ENABLE_PIN) pinMode(enablePin, OUTPUT);
 
@@ -45,10 +43,8 @@ public:
             lastActiveAt = millis();
             if (!powered) enable();
 
-            // Pulses sent while the drivers are still coming up would be lost,
-            // and a lost pulse is a step the counter claims but the axis never
-            // took. Withhold them rather than blocking, so the caller's loop
-            // stays responsive.
+            // Withhold pulses while the drivers wake (they would be counted but
+            // lost), without blocking the caller's loop.
             if (!ready()) return;
         } else if (releasesWhenIdle() && powered &&
                    millis() - lastActiveAt >= idleReleaseMs) {
@@ -58,9 +54,8 @@ public:
         updateMotors();
     }
 
-    // True while any axis still has steps to make. Answered from position
-    // rather than state, because state only turns MOVING once a pulse has gone
-    // out - and pulses are the thing being gated here.
+    // From position, not state: state turns MOVING only after a pulse, and
+    // pulses are what the gate holds back.
     bool hasWork() const {
         for (uint8_t i = 0; i < count; i++) {
             if (motors[i]->getStep() != motors[i]->getTargetStep()) return true;
@@ -68,10 +63,8 @@ public:
         return false;
     }
 
-    // Idle release: drop the EN line once the whole fleet has been at rest for
-    // idleMs, and take it back automatically on the next move. 0 (the default)
-    // keeps the coils energised the whole time. Needs an enable pin; without
-    // one there is nothing to release.
+    // Releases EN after idleMs with the fleet at rest; the next move takes it
+    // back. 0 (default) never releases. See docs/power.md.
     void setIdleRelease(unsigned long idleMs, unsigned long wakeUs = DEFAULT_WAKE_US) {
         this->idleReleaseMs = idleMs;
         this->wakeUs = wakeUs;
@@ -81,15 +74,12 @@ public:
         return idleReleaseMs;
     }
 
-    // The EN input is active low. Energising is what gives the axes their
-    // holding torque; releasing stops the coils heating, at the cost of the
-    // position the counters claim.
+    // EN is active LOW. Releasing stops the coils heating but loses holding torque.
     void enable() {
         if (enablePin != NO_ENABLE_PIN) {
             digitalWrite(enablePin, LOW);
 
-            // Only the transition opens a wake-up window. Re-energising a live
-            // line would otherwise stall the next pulse for no reason.
+            // Only a released -> energised transition opens a wake-up window.
             if (!powered) {
                 enabledAt = micros();
                 waking = true;
@@ -99,8 +89,6 @@ public:
 
         powered = true;
 
-        // With a wake-up window open, ready() lets the pulses through once it
-        // closes; without one they can go now.
         if (!waking) allowPulses(true);
     }
 
@@ -125,8 +113,7 @@ public:
         if (id < count) motors[id]->moveToStep(step);
     }
 
-    // Relative move, anchored on the target, so repeated jogs compose while a
-    // move is still in flight.
+    // Relative to the target, so repeated jogs add up mid-move.
     void moveSteps(uint8_t id, long deltaSteps) {
         if (id < count) motors[id]->moveSteps(deltaSteps);
     }
@@ -148,9 +135,7 @@ public:
         for (uint8_t i = 0; i < count; i++) motors[i]->stopHere();
     }
 
-    // Redefines where an axis believes it is. Step 0 is then no longer the
-    // switch, so the axis stops counting as homed. It is a place someone
-    // chose, though, so its soft limits are armed from here on.
+    // Redefines the position: the axis is no longer homed, but its soft limits arm.
     void setOrigin(uint8_t id, long step = 0) {
         if (id >= count) return;
         motors[id]->setOrigin(step);
@@ -162,9 +147,7 @@ public:
         for (uint8_t i = 0; i < count; i++) setOrigin(i, step);
     }
 
-    // Finds the axis's base position against its endstop - see Homing.h.
-    // Blocking. Energises the drivers first and waits out their wake-up, since
-    // a search that cannot move the axis just fails.
+    // Blocking two-pass homing (Homing.h). Energises the drivers first.
     HomingResult home(uint8_t id, const HomingConfig& cfg) {
         if (id >= count) return NOT_HOMED;
 
@@ -192,9 +175,7 @@ public:
         return (id < count) ? motors[id]->getTargetStep() : 0;
     }
 
-    // Attach a speed profile (see LinearRamp.h), or nullptr for a flat
-    // interval. One instance can serve the whole fleet: profiles hold no
-    // per-move state.
+    // Borrowed speed profile, or nullptr for a flat interval. One can serve the fleet.
     void setProfile(uint8_t id, const StepProfile* p) {
         if (id < count) motors[id]->setProfile(p);
     }
@@ -207,14 +188,12 @@ public:
         return (id < count) ? motors[id]->getProfile() : nullptr;
     }
 
-    // The pace the axis is running at right now, which under a ramp is not the
-    // interval it was asked for.
+    // The interval right now; differs from the set interval while ramping.
     unsigned long getCurrentInterval(uint8_t id) const {
         return (id < count) ? motors[id]->currentInterval() : 0;
     }
 
-    // Brings an axis to rest over its profile's stopping distance rather than
-    // dropping it dead. stopHere()/stopAll() remain immediate.
+    // Stops over the profile's stopping distance; stopHere()/stopAll() are immediate.
     void stopRamped(uint8_t id) {
         if (id < count) motors[id]->stopRamped();
     }
@@ -223,8 +202,7 @@ public:
         for (uint8_t i = 0; i < count; i++) motors[i]->stopRamped();
     }
 
-    // Soft limits, in steps - see Stepper::setLimits(). Armed by home() and
-    // setOrigin().
+    // Soft limits in steps, armed by home() and setOrigin(). See docs/homing.md.
     void setLimits(uint8_t id, long minStep, long maxStep) {
         if (id < count) motors[id]->setLimits(minStep, maxStep);
     }
@@ -241,8 +219,7 @@ public:
         return (id < count) && motors[id]->limitsArmed();
     }
 
-    // Pulse spacing, i.e. speed. Per axis, because a fleet rarely shares one
-    // reduction ratio.
+    // Pulse spacing, per axis.
     void setStepInterval(uint8_t id, unsigned long us) {
         if (id < count) motors[id]->setStepInterval(us);
     }
@@ -264,9 +241,7 @@ private:
         return idleReleaseMs != 0 && enablePin != NO_ENABLE_PIN;
     }
 
-    // Closes the wake window as it passes, so a line that has been live for
-    // hours answers without consulting the clock - and cannot be caught out by
-    // the micros() rollover an open-ended comparison would trip over.
+    // Closes the wake window once passed, so micros() rollover cannot reopen it.
     bool ready() {
         if (!waking) return true;
         if (micros() - enabledAt < wakeUs) return false;
@@ -276,9 +251,7 @@ private:
         return true;
     }
 
-    // Opens or shuts every axis's gate. Skipping update() while the drivers are
-    // not ready only holds back an engine that pulses from update(); one that
-    // steps on its own has to be told.
+    // Self-stepping engines must be told; skipping update() only holds polled ones.
     void allowPulses(bool allowed) {
         for (uint8_t i = 0; i < count; i++) motors[i]->getEngine().allowPulses(allowed);
     }

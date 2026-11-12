@@ -2,19 +2,9 @@
 #include <Arduino.h>
 
 
-// Owns and drives a fixed-size fleet of actuators, addressed by index.
-//
-// T is an actuator root: AngularMotor for angle-driven servos, Stepper for
-// step-driven axes. Both expose the same lifecycle - begin(), a non-blocking
-// update(), a State enum with MOVING and HOLD, the one-shot reachedTarget()
-// edge and the debug toggle - and that lifecycle is all this class touches. Commands in the
-// actuator's own unit (degrees, steps) live on the subclasses, ServoManager and
-// StepperManager.
-//
-// Motors are registered through addMotor(), so a fleet can hold any mix of
-// subtypes: steppers on different driver chips, a PCA9685Servo next to
-// a ServoMotor. Swapping one out is a change at the new-expression and nowhere
-// else, because the manager only ever talks through T.
+// Owns a fixed-size fleet of actuators of root type T (AngularMotor or
+// Stepper), addressed by index. Unit-specific commands live in the subclasses.
+// See docs/architecture.md.
 template <typename T>
 class MotorManager {
 public:
@@ -36,8 +26,7 @@ public:
         delete[] motors;
     }
 
-    // Takes ownership of motor. Returns its id, or INVALID_ID if capacity is
-    // full - ids are handed out in registration order, starting at 0.
+    // Takes ownership. Returns the id (0, 1, ... in order), or INVALID_ID when full.
     uint8_t addMotor(T* motor) {
         if (motor == nullptr || count >= capacity) return INVALID_ID;
         motors[count] = motor;
@@ -81,10 +70,8 @@ public:
     T* get(uint8_t id) const { return (id < count) ? motors[id] : nullptr; }
 
 protected:
-    // The fleet loop. Deliberately not called begin()/update(): a subclass that
-    // has work of its own to do around them (StepperManager and the enable
-    // line) owns those names, and naming these apart means no caller can reach
-    // past it through a MotorManager reference and skip that work.
+    // Named apart from begin()/update() so callers cannot bypass a subclass's
+    // own begin()/update() (e.g. StepperManager's enable line).
     void beginMotors() {
         for (uint8_t i = 0; i < count; i++) motors[i]->begin();
     }

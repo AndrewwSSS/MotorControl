@@ -4,10 +4,7 @@
 
 typedef MotorManager<AngularMotor>::ReachedCallback ServoReachedCallback;
 
-// A fleet of angle-driven motors: MotorManager's lifecycle plus commands in
-// degrees. Any AngularMotor subtype can join (ServoMotor, PCA9685Servo, a
-// degree wrapper around a stepper joint, ...) - the manager only talks through
-// AngularMotor.
+// A fleet of AngularMotors with commands in degrees.
 class ServoManager : public MotorManager<AngularMotor> {
 public:
     explicit ServoManager(uint8_t capacity) : MotorManager<AngularMotor>(capacity) {}
@@ -25,9 +22,7 @@ public:
     }
 
     void setAngle(uint8_t id, int angle) {
-        // AngularMotor::setAngle clamps, but takes an unsigned angle: a negative one
-        // would wrap to a huge value and clamp to maxAngle - the far end of
-        // travel - rather than to the near one meant here.
+        // Clamp negatives here: as unsigned they would wrap and clamp to maxAngle.
         if (angle < 0) angle = 0;
         if (id < count) motors[id]->setAngle((uint16_t)angle);
     }

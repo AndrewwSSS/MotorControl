@@ -210,8 +210,7 @@ void test_a_min_switch_inhibits_downwards() {
     TEST_ASSERT_EQUAL(0, axis.getStep());
 }
 
-// What Phase 4's 1 ms endstop task is for: an engine that steps on its own can
-// cover several steps between two looks at the switch.
+// An engine that steps on its own can make several steps between two endstop checks.
 void test_an_engine_on_its_own_overshoots_by_at_most_one_burst() {
     FakeEngine engine(FakeEngine::OWN, 5);
     Endstop maxSwitch(SWITCH_PIN, Endstop::NORMALLY_OPEN, Endstop::MAX);

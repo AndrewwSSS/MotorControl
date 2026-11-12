@@ -40,10 +40,38 @@ A polled engine is only as steady as the loop that calls it: anything that holds
 (`stepsOnItsOwn()`) keeps going in between, and homing then checks on the axis
 once a millisecond instead of spinning on `update()`.
 
-`FasEngine` is such an engine. Its STEP pulse is half the step interval, so it
-takes no pulse width, and its ramp is the profile's `accelerationFor()`. A move
-that reverses a running one ramps down first and then goes back, where a polled
-engine reverses at full speed. See [`examples/FasEngine`](../examples/FasEngine/FasEngine.ino).
+The engine, not the `Stepper`, owns the position, the target and the ramp:
+an engine that steps on its own is the only part that knows where the axis is
+between two `update()` calls. Positions are signed step counts from the base
+position.
+
+## FasEngine
+
+`FasEngine` is an engine that steps on its own. FastAccelStepper makes its
+pulses in hardware on the ESP32 (MCPWM, counted by PCNT), so the pace holds
+however busy `loop()` is. See [`examples/FasEngine`](../examples/FasEngine/FasEngine.ino).
+
+- **Pulse width:** the STEP pulse is half the step interval, so there is no
+  pulse width to set. A TB6600's 5 µs is met by any interval of 10 µs or more.
+- **DIR setup:** the library's direction-change delay, which rounds
+  `MC_DIR_SETUP_US` up to its own minimum (200 µs on the ESP32). It is only
+  spent on a reversal.
+- **Ramp:** the library ramps from one constant acceleration, the profile's
+  `accelerationFor()`.
+
+Where FastAccelStepper and `StepEngine` behave differently, `FasEngine` bridges
+the gap:
+
+- **Reversals:** the library ignores a move that reverses a running one. Here
+  the axis ramps down first, and `service()` sends the new move once it stops.
+  A polled engine reverses at full speed.
+- **Immediate stops:** `stopNow()` drops the library's queue at once, instead of
+  letting about 20 ms of queued steps run out, which at speed would be a hundred
+  steps onto a switch.
+- **The fleet's pulse gate** does not exist in the library. A move commanded
+  while it is shut waits; a move running when it shuts stops and resumes later.
+- **One library instance** runs every axis. `FasEngine` starts it on first use,
+  so an axis can be built from its pins alone, like any other engine.
 
 ## Driver timing
 

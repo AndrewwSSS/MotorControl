@@ -2,18 +2,12 @@
 #include <Arduino.h>
 #include "StepEngine.h"
 
-
-// The part of a StepEngine that is the same whenever our own code makes the
-// pulses, whatever calls it: position, target, the move's starting point for
-// the ramp, the endstop inhibit, and tick(), which decides whether the next
-// pulse is due. PolledEngine calls tick() from update(); TimerEngine will call
-// it from a hardware timer.
+// Shared base for engines whose pulses are timed by our own code: position,
+// target, ramp, endstop inhibit, and tick(), which emits a pulse when one is due.
 class SoftEngine : public StepEngine {
 public:
     void moveTo(long step) override {
-        // A move commanded while the axis is already running composes onto the
-        // one in flight, so it keeps that move's starting point: restarting the
-        // ramp would slow a running axis back down to its starting speed.
+        // Mid-move, keep the original start so the ramp does not restart.
         if (currentStep == targetStep) moveStartStep = currentStep;
 
         targetStep = step;
@@ -54,8 +48,7 @@ public:
         return currentStep != targetStep;
     }
 
-    // Settable after construction because homing switches between a fast seek
-    // and a slow, repeatable re-approach.
+    // Changed at runtime by homing (fast seek, slow re-approach).
     void setStepInterval(unsigned long us) override {
         stepIntervalUs = us;
     }
@@ -64,8 +57,6 @@ public:
         return stepIntervalUs;
     }
 
-    // The profile's idea of the pace here, or the flat interval when there is
-    // no profile.
     unsigned long currentInterval() const override {
         if (!profile_) return stepIntervalUs;
 
@@ -77,8 +68,7 @@ public:
                                      stepIntervalUs);
     }
 
-    // The profile is borrowed, not owned - it is expected to outlive the axis,
-    // which a file-scope instance in the sketch does.
+    // Borrowed: the profile must outlive the axis.
     void setProfile(const StepProfile* p) override {
         profile_ = p;
     }
@@ -106,16 +96,14 @@ protected:
           inhibited(0),
           pulsesAllowed(true) {}
 
-    // Emits at most one step pulse, if one is due at now, and says whether it
-    // did. Never waits.
+    // Emits at most one pulse if one is due at `now`; returns whether it did.
     bool tick(unsigned long now) {
         if (currentStep == targetStep) return false;
         if (!pulsesAllowed) return false;
 
         int8_t dir = (targetStep > currentStep) ? 1 : -1;
 
-        // Driving further onto a pressed endstop crashes the axis. Cancel the
-        // move; moving away from the switch stays allowed.
+        // Never drive further onto a pressed endstop; moving away is allowed.
         if (dir == inhibited) {
             stopNow();
             return false;
@@ -136,8 +124,7 @@ protected:
         lastStepAt = 0;
     }
 
-    // Sets the driver's direction input ahead of a pulse. forward means the
-    // step counter is about to increase.
+    // Sets DIR before a pulse; forward means the step count increases.
     virtual void applyDirection(bool forward) = 0;
 
     // Emits exactly one step pulse.

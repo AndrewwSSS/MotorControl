@@ -1,15 +1,7 @@
 #pragma once
 
-// A stand-in for FastAccelStepper 1.4.0, for testing FasEngine on the host.
-// Only what FasEngine calls, with the library's behaviour where it shapes
-// FasEngine's design:
-//
-//   - moveTo() while running is silently ignored when it would reverse the
-//     move (or ask it to stop where it is).
-//   - stopMove() ramps down over stepsToStop() steps, never past the target.
-//   - forceStopAndNewPosition() stops at once.
-//
-// Nothing moves on its own: a test calls run(n) to let n steps go out.
+// Fake FastAccelStepper 1.4.0 with the behaviour FasEngine depends on; a test
+// calls run(n) to let steps go out. See docs/testing.md.
 
 #include <stdint.h>
 
@@ -133,8 +125,7 @@ public:
         return &pool[used++];
     }
 
-    // Frees every stepper, for a fresh test. The engine object itself is a
-    // static inside fasEngine() and outlives the tests.
+    // Frees every stepper; the engine itself is a static in fasEngine().
     static void reset() { used = 0; }
 
     static inline FastAccelStepper pool[CAPACITY];

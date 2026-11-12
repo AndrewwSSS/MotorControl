@@ -1,30 +1,17 @@
 #pragma once
 #include <Arduino.h>
 
-// A limit switch at one end of an axis's travel: an Omron D3V-style SPDT
-// microswitch, or any snap-action switch, wired between a pin and GND.
-//
-// Attach it to a Stepper with setEndstop() and the axis refuses to drive
-// further onto it once it is pressed; moving away stays allowed. An axis has a
-// slot at each end, so a second switch on its own pin is a second Endstop with
-// the other Side. Homing (Homing.h) drives the axis onto one of them to find
-// its base position.
-//
-// Borrowed, not owned, like a StepProfile: declare it at file scope in the
-// sketch so it outlives the axis.
+// A limit switch between a pin and GND at one end of an axis's travel. Borrowed
+// by the Stepper, so it must outlive it. See docs/homing.md.
 class Endstop {
 public:
-    // Prefer NORMALLY_CLOSED. Wired that way the loop is closed while the axis
-    // is clear, so a cut wire, a cold crimp or an unplugged connector reads
-    // exactly like a trigger and stops the axis. Wired NORMALLY_OPEN those
-    // same faults read "all clear" and the axis drives into the stop.
+    // Prefer NORMALLY_CLOSED: a broken wire then reads as triggered, not clear.
     enum Wiring : uint8_t {
         NORMALLY_OPEN,
         NORMALLY_CLOSED
     };
 
-    // Which end of travel the switch sits at, as the sign of the step count
-    // moving towards it.
+    // The end of travel, as the sign of the step direction towards it.
     enum Side : int8_t {
         MIN = -1,
         MAX = 1
@@ -40,10 +27,8 @@ public:
         resync();
     }
 
-    // A snap-action switch chatters for a few milliseconds around the
-    // transition. Waiting for a stable level would delay detection and let the
-    // axis overshoot the trip point, so act on the first edge seen and then
-    // ignore the pin until the contacts have settled.
+    // Acts on the first edge, then ignores the pin while the contacts chatter:
+    // waiting for a stable level would let the axis overshoot.
     void update() {
         if (millis() - lastChange < DEBOUNCE_MS) return;
 
@@ -54,13 +39,8 @@ public:
         lastChange = millis();
     }
 
-    // Ground truth, bypassing the debounce lock-out. A homing run may start
-    // within the debounce window of a previous one or of a knock, and opening
-    // the search in the wrong phase from a stale reading wastes a pass.
-    //
-    // A reading is not an edge, so it opens no lock-out of its own: the next
-    // update() acts on a press at once. Dated one window back to say so - the
-    // unsigned subtraction in update() makes that safe at any millis().
+    // Reads the pin directly, bypassing the debounce window, and opens no window
+    // of its own. Dated one window back; unsigned subtraction keeps that safe.
     void resync() {
         triggered = readRaw();
         lastChange = millis() - DEBOUNCE_MS;
@@ -71,9 +51,7 @@ public:
         return triggered;
     }
 
-    // The pin right now, interpreted through the wiring. INPUT_PULLUP idles the
-    // pin HIGH: a NO contact closes to GND when hit (LOW means triggered), a NC
-    // contact opens when hit and lets the pull-up win (HIGH means triggered).
+    // The pin now, through the wiring: NO triggers LOW, NC triggers HIGH (pull-up).
     bool readRaw() const {
         bool high = (digitalRead(pin) == HIGH);
         return (wiring == NORMALLY_OPEN) ? !high : high;

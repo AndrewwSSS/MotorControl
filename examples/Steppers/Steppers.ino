@@ -1,11 +1,7 @@
-// Two step+dir axes sharing one EN line: the first homes against a limit
-// switch at start-up, then both swing back and forth under a speed ramp. X is
-// a StepDirStepper, the one-line form; Y is a Stepper built on an engine of its
-// own, the form that lets an axis pick its engine.
-//
-// Builds for the Uno (CNC Shield pins) and the ESP32 (the pin map from the
-// migration plan). scripts/check.sh compiles it for both, which is how the
-// library proves it still builds on each board.
+// Two step+dir axes sharing one EN line: X homes against a limit switch at
+// start-up, then both swing back and forth under a speed ramp. X is a
+// StepDirStepper; Y is a Stepper on a separately declared engine.
+// Uno (CNC Shield pins) or ESP32.
 
 #include <Arduino.h>
 #include <Endstop.h>

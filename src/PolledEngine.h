@@ -2,14 +2,8 @@
 #include <Arduino.h>
 #include "SoftEngine.h"
 
-// Makes pulses on a step+dir driver's pins, each one timed against micros()
-// when update() comes round: A4988, DRV8825, TB6600, DM542 and the like. They
-// differ only in timing, which is the pulse width below and the DIR setup
-// above.
-//
-// Works on any board, with no timer or interrupt. The price is that the pace is
-// only as steady as the caller's loop: anything that holds loop() up holds the
-// next pulse up with it.
+// Step+dir pulses timed against micros() from update(), on any board. The pace
+// is only as steady as the caller's loop. See docs/engines.md.
 class PolledEngine : public SoftEngine {
 public:
     static constexpr uint8_t NO_ENABLE_PIN = 0xFF;
@@ -48,8 +42,7 @@ public:
         return false;
     }
 
-    // The driver's EN input is active low. Releasing it frees the shaft and
-    // stops the coils heating
+    // EN is active LOW. Disabling frees the shaft and stops the coils heating.
     void enable() override {
         if (enablePin != NO_ENABLE_PIN) digitalWrite(enablePin, LOW);
     }
@@ -67,9 +60,8 @@ public:
     }
 
 protected:
-    // tick() pulses straight after this, so a change of direction waits out
-    // the setup time here. Without it a slow driver takes the first step of a
-    // reversal the old way, and the counter drifts a step per reversal.
+    // Waits out the DIR setup time on a reversal; without it a slow driver takes
+    // the first step the old way and the count drifts.
     void applyDirection(bool forward) override {
         int8_t dir = forward ? 1 : 0;
         if (dir == lastForward) return;

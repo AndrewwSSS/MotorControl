@@ -1,10 +1,8 @@
-// Two axes on the ESP32 whose pulses come from FastAccelStepper, in hardware:
-// the swing stays smooth however long loop() is held up. Each axis owns its
-// engine through EngineStepper; the ramp is the same LinearRamp a polled axis
-// uses, which FasEngine hands the library as one acceleration.
+// Two axes on the ESP32 with pulses from FastAccelStepper, in hardware, so the
+// motion stays smooth however long loop() is held up. Each axis owns its engine
+// through EngineStepper and shares one LinearRamp.
 //
-// ESP32 only, and needs gin66/FastAccelStepper@1.4.0 in lib_deps.
-// scripts/check.sh compiles it against the real library.
+// ESP32 only; needs gin66/FastAccelStepper@1.4.0 in lib_deps.
 
 #include <Arduino.h>
 #include <EngineStepper.h>

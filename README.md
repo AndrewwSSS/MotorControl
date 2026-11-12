@@ -7,7 +7,8 @@
 A header-only Arduino / PlatformIO library that drives a fleet of servos and
 stepper axes without blocking `loop()`: endstops, two-pass homing, speed ramps,
 soft limits and idle power release, with the pulse generation swappable per axis.
-It runs two robotic arms and a CNC-shield test rig.
+It drives [scara-arm](https://github.com/AndrewwSSS/scara-arm), a 3D-printed
+SCARA robot, along with a servo arm and a test rig.
 
 <!-- Demo GIF goes here: ![Homing and moving](docs/media/demo.gif) -->
 
@@ -105,6 +106,7 @@ anywhere else. Servos have their own root, `AngularMotor`, and share the same
 | [Releasing the coils](docs/power.md) | Idle power release on a shared enable line |
 | [Logging](docs/logging.md) | Compile-time log levels and the output stream |
 | [Architecture](docs/architecture.md) | File layout, the two roots, adding a motor type or manager |
+| [Testing](docs/testing.md) | Host tests, the fake Arduino core and the fake engines |
 
 ## Tests
 

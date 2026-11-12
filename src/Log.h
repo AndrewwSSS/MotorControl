@@ -1,13 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
-// Compile-time log levels. Pick one per project in platformio.ini, so every
-// translation unit that includes the library sees the same value:
-//
-//   build_flags = -D MC_LOG_LEVEL=MC_LOG_DEBUG
-//
-// Anything above the chosen level is removed by the preprocessor - its text
-// never reaches flash or RAM, which on an Uno's 2 KB matters.
+// Compile-time log levels, set with build_flags = -D MC_LOG_LEVEL=...; messages
+// above the level are compiled out. See docs/logging.md.
 #define MC_LOG_NONE  0
 #define MC_LOG_ERROR 1   // something failed and the caller should know
 #define MC_LOG_INFO  2   // start-up and one-off events
@@ -18,8 +13,7 @@
 #define MC_LOG_LEVEL MC_LOG_INFO
 #endif
 
-// Where the messages go. Any Print works: Serial1, a SoftwareSerial, a
-// Bluetooth module's stream. It is not begun here - the sketch owns it.
+// Output stream (any Print). The sketch must begin() it.
 #ifndef MC_LOG_STREAM
 #define MC_LOG_STREAM Serial
 #endif
@@ -30,9 +24,8 @@ inline void printAll() {
     MC_LOG_STREAM.println();
 }
 
-// Prints each argument in turn, then a newline. Takes whatever Print::print
-// takes, so pass F("...") for text and plain numbers for values - no String
-// concatenation, which fragments the heap on AVR.
+// Prints each argument, then a newline. Pass F("...") text, not Strings, to
+// avoid heap fragmentation on AVR.
 template <typename T, typename... Rest>
 inline void printAll(const T& first, const Rest&... rest) {
     MC_LOG_STREAM.print(first);

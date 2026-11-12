@@ -9,9 +9,7 @@
 #include "Log.h"
 #include "StepEngine.h"
 
-// FastAccelStepper runs every axis from one engine object, started once. It
-// lives here rather than in the sketch so an axis can be built from its pins
-// alone, like any other engine.
+// The single FastAccelStepper engine shared by all axes, started on first use.
 inline FastAccelStepperEngine& fasEngine() {
     static FastAccelStepperEngine engine;
     static bool started = false;
@@ -22,23 +20,9 @@ inline FastAccelStepperEngine& fasEngine() {
     return engine;
 }
 
-// Makes pulses with FastAccelStepper: in hardware on the ESP32 (MCPWM, counted
-// by PCNT), so the pace holds however busy loop() is, and the ramp is computed
-// by the library from one acceleration (StepProfile::accelerationFor()).
-//
-// The STEP pulse is half the step interval, so there is no pulse width to set:
-// a TB6600's 5 us is met by any interval of 10 us or more. DIR setup is the
-// library's direction-change delay, which rounds MC_DIR_SETUP_US up to its own
-// minimum (200 us on the ESP32), paid only per reversal.
-//
-// Where the library and StepEngine differ, this class bridges:
-//
-//   - A move that reverses a running one is ignored by the library. Here it
-//     waits: the axis ramps down, and service() sends the move once it stops.
-//   - stopNow() drops the library's queue at once instead of letting ~20 ms of
-//     queued steps run out, which at speed is a hundred steps onto a switch.
-//   - The fleet's gate does not exist in the library. A move commanded while
-//     it is shut waits, and a move running when it shuts stops and resumes.
+// A StepEngine on FastAccelStepper: pulses and ramps in hardware on the ESP32.
+// Bridges the library's differences (reversals, immediate stops, the pulse
+// gate) as described in docs/engines.md.
 class FasEngine : public StepEngine {
 public:
     // Steps/s^2 used when there is no profile: full speed within a step or two.
@@ -60,8 +44,7 @@ public:
 
     // --- Motion --------------------------------------------------------------
 
-    // Without a library stepper (see begin()) nothing can move, so nothing is
-    // taken on.
+    // Ignored if begin() found no free library stepper.
     void moveTo(long step) override {
         if (!fas) return;
 
@@ -84,8 +67,7 @@ public:
         int8_t moving = runningDirection();
         if (moving == 0) return;
 
-        // Where the library will come to rest: its stopping distance on from
-        // here, but never past the end of the move it is running.
+        // Where the library will stop: its stopping distance, capped at the move's end.
         long here = fas->getCurrentPosition();
         long end = fas->targetPos();
         long stopAt = here + moving * (long)fas->stepsToStop();
@@ -108,8 +90,7 @@ public:
         return fas ? fas->getCurrentPosition() : targetStep;
     }
 
-    // Once the library has stopped with nothing waiting, wherever it stopped
-    // is the target: a ramped stop or a refused move ends there.
+    // Once stopped with nothing pending, the stop position is the target.
     long target() const override {
         if (fas && !pending && !fas->isRunning()) return fas->getCurrentPosition();
         return targetStep;
@@ -156,8 +137,7 @@ public:
 
     // --- Work ----------------------------------------------------------------
 
-    // Sends a move that was waiting for a reversal to ramp down or for the
-    // gate to open. Never makes a pulse itself.
+    // Sends a pending move once a reversal has ramped down or the gate opens.
     bool service() override {
         if (pending) send();
         return false;
@@ -177,8 +157,8 @@ public:
         pending = true;
     }
 
-    // The library's own handle, for what StepEngine does not cover. nullptr
-    // before begin(), or when the library had no stepper left.
+    // The library's handle for features StepEngine lacks; nullptr before begin()
+    // or if no stepper was free.
     FastAccelStepper* stepper() const {
         return fas;
     }
@@ -205,9 +185,8 @@ private:
 
         int8_t moving = runningDirection();
         if (moving != 0 && way != moving) {
-            // The library would ignore it: ramp down, and try again from
-            // service() once stopped. Asked to stop right here, stop dead,
-            // as a polled engine would.
+            // The library ignores reversals: ramp down and retry from service().
+            // A move to the current position stops dead, as a polled engine would.
             if (way == 0) stopNow();
             else          fas->stopMove();
             return;
