@@ -3,16 +3,9 @@
 #include "EngineStepper.h"
 #include "PolledEngine.h"
 
-// A Stepper on any step+dir driver (A4988, DRV8825, TB6600, DM542 and the
-// like), with its own PolledEngine built in: the one-line way to get an axis,
-// and the shape every sketch written before the engine split already uses.
-// It is an EngineStepper<PolledEngine> with the constructor sketches already
-// call. To drive the axis from another engine, use EngineStepper with that
-// engine instead.
-//
-// Microstepping is set by jumpers, MS pins or DIP switches on the driver, not
-// from here, so stepsPerRevolution must be given as full steps x microsteps (a
-// 1.8 deg/step motor at 1/16 is 200 x 16 = 3200).
+// An EngineStepper<PolledEngine> for any step+dir driver (A4988, DRV8825,
+// TB6600, DM542). Microstepping is set on the driver, so stepsPerRevolution is
+// full steps x microsteps (200 x 16 = 3200 for a 1.8 deg motor at 1/16).
 class StepDirStepper : public EngineStepper<PolledEngine> {
 public:
     static constexpr uint8_t NO_ENABLE_PIN = PolledEngine::NO_ENABLE_PIN;
@@ -28,8 +21,7 @@ public:
         : EngineStepper<PolledEngine>(stepsPerRevolution, stepPin, dirPin,
                                       enablePin, stepIntervalUs, stepPulseUs) {}
 
-    // The driver's EN input is active low. Releasing it frees the shaft and
-    // stops the coils heating
+    // EN is active LOW. Disabling frees the shaft and stops the coils heating.
     void enable() {
         getEngine().enable();
     }
