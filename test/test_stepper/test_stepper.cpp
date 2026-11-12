@@ -1,7 +1,5 @@
-// Characterisation of today's StepDirStepper: what reaches the STEP and DIR
-// pins for a move, and how the endstop guard treats a pressed switch. These
-// pin down behaviour before the StepEngine split, which must not change any
-// of it.
+// StepDirStepper at the pins: what reaches STEP and DIR for a move, and how the
+// endstop guard treats a pressed switch.
 
 #include <unity.h>
 #include <Arduino.h>
@@ -232,9 +230,8 @@ void test_a_min_switch_only_guards_travel_downwards() {
     TEST_ASSERT_EQUAL(5, axis.getStep());
 }
 
-// A resync is a reading, not an edge: it must not blind the guard. Homing
-// opens every search with one, and starting close to the switch used to
-// overshoot by up to 5 ms of travel.
+// A resync must not open a debounce window: homing starts with one, and a window
+// would let an axis near the switch overshoot by up to 5 ms of travel.
 void test_a_press_straight_after_a_resync_is_seen() {
     Endstop maxSwitch(SWITCH_PIN, Endstop::NORMALLY_OPEN, Endstop::MAX);
     maxSwitch.begin();

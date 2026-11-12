@@ -1,20 +1,7 @@
 #pragma once
 
-// A StepEngine with no pins and no timing, for testing the logic above the
-// engine - Stepper, homing, the fleet - on its own. It records what it was
-// told, and moves the way the test asks:
-//
-//   POLLED   one step per service(), which returns true, like PolledEngine
-//   OWN      stepsPerService steps per service(), which returns false, like an
-//            engine that keeps stepping between two update() calls (FasEngine,
-//            TimerEngine). The steps come in a burst, which is the worst case
-//            for how late the endstop guard sees a switch.
-//
-// Each step moves fake time on by the step interval, so time passes as it would
-// on a real axis and the endstops' debounce runs its course.
-//
-// shaft() is where the motor really is. Unlike position() it is not reset by
-// setPosition(), so homing tests can check where step 0 ended up.
+// A StepEngine without pins or timing, in POLLED or OWN (self-stepping) mode,
+// for testing Stepper, homing and the fleet. See docs/testing.md.
 
 #include <Arduino.h>
 #include "StepEngine.h"

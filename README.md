@@ -106,6 +106,7 @@ anywhere else. Servos have their own root, `AngularMotor`, and share the same
 | [Releasing the coils](docs/power.md) | Idle power release on a shared enable line |
 | [Logging](docs/logging.md) | Compile-time log levels and the output stream |
 | [Architecture](docs/architecture.md) | File layout, the two roots, adding a motor type or manager |
+| [Testing](docs/testing.md) | Host tests, the fake Arduino core and the fake engines |
 
 ## Tests
 

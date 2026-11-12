@@ -1,7 +1,5 @@
-// PolledEngine on its own, before any Stepper drives it: the same pulses, the
-// same DIR handling and the same ramp pacing the Phase 0 tests pinned down for
-// StepDirStepper, plus the inhibit that replaces the endstop guard inside the
-// engine.
+// PolledEngine on its own: STEP pulses, DIR handling, ramp pacing and the
+// endstop inhibit.
 
 #include <unity.h>
 #include <Arduino.h>

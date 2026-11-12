@@ -1,8 +1,5 @@
 // A hobby servo on its own pin and one on a PCA9685 channel, in one fleet,
-// sweeping between two angles.
-//
-// Builds for the Uno and the ESP32; scripts/check.sh compiles it for both.
-// On the ESP32 the PCA9685 sits on the default I2C pins, SDA 21 and SCL 22.
+// sweeping between two angles. Uno or ESP32 (PCA9685 on SDA 21, SCL 22).
 
 #include <Arduino.h>
 #include <Adafruit_PWMServoDriver.h>

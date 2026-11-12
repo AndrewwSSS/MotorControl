@@ -1,22 +1,7 @@
 #pragma once
 
-// A stand-in for the Arduino core, just big enough for the library's headers to
-// compile and run on the host under `pio test -e native`. Only the native env
-// puts this directory on the include path; boards build against their real core.
-//
-// Nothing here touches hardware, so a test controls everything a sketch would
-// get from the outside world:
-//
-//   time    stands still until the test moves it (fake::advanceUs), or moves by
-//           a fixed amount on every micros() call (fake::setAutoAdvance) so that
-//           busy-wait loops such as homing's drive() make progress
-//   writes  every digitalWrite is recorded with the time it happened
-//   reads   digitalRead returns what the test scripted, per pin or through a
-//           handler that can follow the axis (a switch closing at some step)
-//   Serial  collects whatever is printed, log output included
-//
-// Known gap: unsigned long is 64 bits here and 32 bits on the boards, so the
-// micros() rollover cannot be reproduced. Tests keep time well clear of it.
+// Minimal Arduino core for host tests: scripted time, pin reads and Serial,
+// with every pin write recorded. See docs/testing.md.
 
 #include <stdint.h>
 #include <stddef.h>
@@ -35,9 +20,7 @@
 typedef uint8_t byte;
 typedef bool    boolean;
 
-// On AVR, F() keeps a string in flash and tags it with this type so Print knows
-// to read it from there. On the host a plain pointer does, but the type is kept
-// so overloads resolve exactly as they do on a board.
+// Kept as a distinct type so overloads resolve as they do on AVR.
 class __FlashStringHelper;
 #define F(s) (reinterpret_cast<const __FlashStringHelper*>(s))
 
@@ -128,8 +111,7 @@ struct State {
 
 inline State state;
 
-// Back to power-on: time 0, no writes, every input reading HIGH (a pulled-up
-// pin with nothing pulling it down), Serial empty. Call from setUp().
+// Power-on state: time 0, no writes, inputs HIGH, Serial empty. Call from setUp().
 inline void reset() {
     state.nowUs = 0;
     state.autoAdvanceUs = 0;
